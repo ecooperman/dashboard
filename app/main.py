@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from shared_python import auth, oidc_login
+from shared_python import auth, csrf, oidc_login
 
 from . import access, config
 
@@ -30,6 +30,7 @@ def _get_git_sha() -> str:
 GIT_SHA = _get_git_sha()
 
 app = FastAPI(title="dashboard")
+csrf.install(app)  # a change must come from this app's own pages, not another app or site (shared_python.csrf)
 templates = Jinja2Templates(directory="templates")
 
 

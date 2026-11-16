@@ -314,3 +314,14 @@ def test_nobody_elses_cookie_or_extra_cookies_are_forwarded(production, key, app
 def test_a_signed_out_visitor_causes_no_calls_to_the_apps(production, apps_say):
     production.get("/")
     assert apps_say.calls == []
+
+
+# --- cross-app request forgery -------------------------------------------------------------------------------------------
+
+
+def test_the_cross_site_guard_is_installed(client):
+    """The dashboard changes nothing through its own pages, but the guard is on for every app: a change request
+    carrying another app's fetch metadata is refused before it reaches anything."""
+    resp = client.post("/", headers={"Sec-Fetch-Site": "same-site", "Origin": "https://lists.example.org"})
+    assert resp.status_code == 403 and "didn't come from this app" in resp.text
+    assert client.post("/", headers={"Sec-Fetch-Site": "same-origin"}).status_code == 405  # reaches the app, which has no POST here
