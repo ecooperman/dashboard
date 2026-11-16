@@ -74,14 +74,17 @@ def index(request: Request):
 
 @app.get("/signed-out", response_class=HTMLResponse)
 def signed_out(request: Request):
-    """Where logging out lands (OIDC_LOGOUT_RETURN_PATH). Someone who is somehow still signed in
-    just goes home instead of being told they are signed out."""
-    try:
-        signed_in_email(request)
-        return RedirectResponse("/", status_code=302)
-    except HTTPException as exc:
-        if exc.status_code != 401:
-            raise
+    """Where logging out lands (OIDC_LOGOUT_RETURN_PATH). Someone who still has a real session cookie
+    just goes home instead of being told they are signed out. (Only a real session counts: locally
+    everyone is the dev user, which would otherwise hide this page.)"""
+    cookie = auth.oidc_cookie_name()
+    if cookie and request.cookies.get(cookie):
+        try:
+            signed_in_email(request)
+            return RedirectResponse("/", status_code=302)
+        except HTTPException as exc:
+            if exc.status_code != 401:
+                raise
     return templates.TemplateResponse(request, "goodbye.html", {"shared_assets_base": config.SHARED_ASSETS_BASE})
 
 

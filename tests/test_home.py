@@ -209,3 +209,14 @@ def test_logging_out_lands_on_the_goodbye_page_when_configured(production, key, 
     monkeypatch.setattr(requests, "get", lambda url, **kw: _Reply({"end_session_endpoint": ISSUER + "/oidc/logout"}))
     target = urlparse(production.get("/auth/logout").headers["location"])
     assert parse_qs(target.query)["post_logout_redirect_uri"] == ["https://dashboard.evancooperman.com/signed-out"]
+
+
+def test_locally_the_goodbye_page_shows_when_there_is_no_real_session(client):
+    """Locally everyone is the dev user, but only a real session cookie should hide the goodbye page."""
+    resp = client.get("/signed-out")
+    assert resp.status_code == 200 and "See you, space cowboy" in resp.text
+
+
+def test_an_expired_session_cookie_still_gets_the_goodbye_page(production, key):
+    production.cookies.set("oidc_session", id_token(key).replace(id_token(key).split(".")[2], "bad"))
+    assert production.get("/signed-out").status_code == 200
