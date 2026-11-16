@@ -20,9 +20,9 @@ if ENV != "production":
     ADMIN_EMAILS.add(DEV_USER_EMAIL)
 
 # The apps the landing page links to. `access` says who sees one:
-#   "member" - the app has its own accounts (lists, trips): a person sees it only if THAT app says they have an
+#   "member" - the app has its own accounts (lists, trips, plans): a person sees it only if THAT app says they have an
 #              account (asked over localhost with their own session cookie, see app/access.py);
-#   "admin"  - a private app with no accounts: only the administrators see it.
+#   "admin"  - a private app with no accounts yet (time, finances, flights): only the administrators see it.
 # Administrators see every app.
 APPS = [
     {"key": "lists", "name": "Lists", "host": "lists.evancooperman.com", "port": 8030, "icon": "list",
@@ -32,7 +32,7 @@ APPS = [
     {"key": "time", "name": "Time", "host": "time.evancooperman.com", "port": 8010, "icon": "calendar",
      "blurb": "Time management.", "access": "admin"},
     {"key": "plans", "name": "Plans", "host": "plans.evancooperman.com", "port": 8020, "icon": "users",
-     "blurb": "Social plans.", "access": "admin"},
+     "blurb": "Places and ideas to do, saved from around the web.", "access": "member"},
     {"key": "finances", "name": "Finances", "host": "finances.evancooperman.com", "port": 8080, "icon": "wallet",
      "blurb": "The household budget.", "access": "admin"},
     {"key": "flights", "name": "Flights", "host": "flights.evancooperman.com", "port": 8050, "icon": "plane",
@@ -44,6 +44,7 @@ APPS = [
 APP_API_BASE = {
     "lists": os.environ.get("LISTS_API_BASE", "http://127.0.0.1:8030"),
     "trips": os.environ.get("TRIPS_API_BASE", "http://127.0.0.1:8060"),
+    "plans": os.environ.get("PLANS_API_BASE", "http://127.0.0.1:8020"),
 }
 APP_CHECK_TIMEOUT = 2  # seconds; an app that does not answer in time is left off the page
 
