@@ -1,0 +1,48 @@
+/* Only what is specific to the dashboard; the look and feel is the shared theme. */
+
+.app-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.app-tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "icon name" "blurb blurb";
+  align-items: center;
+  gap: 6px 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.app-tile:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.app-tile-icon {
+  grid-area: icon;
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.app-tile-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.app-tile-name {
+  grid-area: name;
+  font-weight: 600;
+}
+
+.app-tile-blurb {
+  grid-area: blurb;
+  color: var(--muted);
+  font-size: 13px;
+}

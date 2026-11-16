@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-ui="v2">
+<head>
+  <title>Brassworks</title>
+{% include "_head.html" %}
+</head>
+<body>
+  <header class="app-header">
+    <h1>Brassworks</h1>
+    <p class="subtitle">Signed in as {{ email }}</p>
+  </header>
+
+  <main>
+    <section class="section">
+      <h2>Your apps</h2>
+      <div class="app-tiles">
+        {% for app in apps %}
+        <a class="app-tile" href="{{ app.url }}">
+          <span class="app-tile-icon" data-icon="{{ app.icon }}" aria-hidden="true"></span>
+          <span class="app-tile-name">{{ app.name }}</span>
+          <span class="app-tile-blurb">{{ app.blurb }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/home.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+import os
+
+HOST = "127.0.0.1"
+PORT = 8090
+
+# "local" (default) or "production" (set once, droplet-wide, via systemd's DefaultEnvironment -
+# see DEPLOYMENT.md). Drives which shared-assets host the templates point at and whether the
+# links to the other apps are the real addresses or localhost ports.
+ENV = os.environ.get("APP_ENV", "local")
+SHARED_ASSETS_BASE = "https://static.evancooperman.com" if ENV == "production" else "http://127.0.0.1:8070"
+
+# Locally there is no sign-in unless a session exists, so requests are treated as coming from this
+# address (never used in production). Same convention as the other apps.
+DEV_USER_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@localhost.test").strip().lower()
+
+# Administrators (comma-separated emails): they see every app on the landing page. Everyone else
+# sees only the apps marked shared. Unset locally, the dev user is one.
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+if ENV != "production":
+    ADMIN_EMAILS.add(DEV_USER_EMAIL)
+
+# The apps the landing page links to. `shared` = offered to every signed-in person (people can be
+# let into these); the rest are for the administrator only. Stage 2 will replace this static list
+# with what each person actually has access to.
+APPS = [
+    {"key": "lists", "name": "Lists", "host": "lists.evancooperman.com", "port": 8030, "icon": "list",
+     "blurb": "Gift ideas, shopping lists, anything worth keeping track of.", "shared": True},
+    {"key": "trips", "name": "Trips", "host": "trips.evancooperman.com", "port": 8060, "icon": "compass",
+     "blurb": "Plan trips: places, activities, stays and the days between.", "shared": True},
+    {"key": "time", "name": "Time", "host": "time.evancooperman.com", "port": 8010, "icon": "calendar",
+     "blurb": "Time management.", "shared": False},
+    {"key": "plans", "name": "Plans", "host": "plans.evancooperman.com", "port": 8020, "icon": "users",
+     "blurb": "Social plans.", "shared": False},
+    {"key": "finances", "name": "Finances", "host": "finances.evancooperman.com", "port": 8080, "icon": "wallet",
+     "blurb": "The household budget.", "shared": False},
+    {"key": "flights", "name": "Flights", "host": "flights.evancooperman.com", "port": 8050, "icon": "plane",
+     "blurb": "Flight market agents.", "shared": False},
+]
+
+
+def app_url(app: dict) -> str:
+    return f"https://{app['host']}/" if ENV == "production" else f"http://localhost:{app['port']}/"
