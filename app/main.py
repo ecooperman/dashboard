@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from shared_python import auth, oidc_login
 
-from . import config
+from . import access, config
 
 # The front door for every app: /auth/login, /auth/callback and /auth/logout (shared_python.oidc_login)
 # sign people in through the identity provider and set the session cookie for the whole parent
@@ -67,8 +67,7 @@ def index(request: Request):
         if exc.status_code != 401:
             raise  # 503: sign-in isn't configured on the server
         return templates.TemplateResponse(request, "signed_out.html", base)
-    admin = email in config.ADMIN_EMAILS
-    apps = [dict(a, url=config.app_url(a)) for a in config.APPS if admin or a["shared"]]
+    apps = access.apps_for(request, email)
     return templates.TemplateResponse(request, "index.html", {**base, "email": email, "apps": apps})
 
 

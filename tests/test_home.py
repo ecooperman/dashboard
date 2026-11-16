@@ -51,6 +51,33 @@ def production(monkeypatch, key):
     return TestClient(app, base_url="https://dashboard.evancooperman.com", follow_redirects=False)
 
 
+class AppAnswers:
+    """Stands in for lists and trips answering /api/me on this machine; records every call."""
+
+    def __init__(self):
+        self.status = {"lists": 200, "trips": 200}  # or an exception instance to raise
+        self.calls = []
+
+    def get(self, url, headers=None, timeout=None, allow_redirects=True):
+        self.calls.append({"url": url, "headers": headers, "timeout": timeout, "allow_redirects": allow_redirects})
+        app = "lists" if ":8030" in url else "trips" if ":8060" in url else "other"
+        answer = self.status.get(app, 500)
+        if isinstance(answer, Exception):
+            raise answer
+
+        class Reply:
+            status_code = answer
+
+        return Reply()
+
+
+@pytest.fixture()
+def apps_say(monkeypatch):
+    answers = AppAnswers()
+    monkeypatch.setattr(requests, "get", answers.get)
+    return answers
+
+
 def names(html):
     return [a["name"] for a in config.APPS if f">{a['name']}</span>" in html]
 
@@ -71,7 +98,7 @@ def test_a_signed_out_visitor_gets_a_sign_in_button_and_no_apps(production):
     assert names(resp.text) == []
 
 
-def test_an_ordinary_signed_in_person_sees_only_the_shared_apps_at_their_real_addresses(production, key):
+def test_an_ordinary_signed_in_person_sees_the_apps_that_say_they_have_an_account(production, key, apps_say):
     production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
     html = production.get("/").text
     assert names(html) == ["Lists", "Trips"]
@@ -84,7 +111,7 @@ def test_the_administrator_sees_every_app(production, key):
     assert names(production.get("/").text) == [a["name"] for a in config.APPS]
 
 
-def test_an_email_is_escaped_in_the_page(production, key):
+def test_an_email_is_escaped_in_the_page(production, key, apps_say):
     production.cookies.set("oidc_session", id_token(key, "x<script>alert(1)</script>@example.com"))
     html = production.get("/").text
     assert "<script>alert(1)" not in html and "&lt;script&gt;" in html
@@ -182,7 +209,7 @@ def test_there_are_no_sign_in_routes_until_the_provider_is_configured(client):
 # --- the name and the small touches -------------------------------------------------------------
 
 
-def test_the_page_is_called_brassworks(production, key):
+def test_the_page_is_called_brassworks(production, key, apps_say):
     production.cookies.set("oidc_session", id_token(key))
     html = production.get("/").text
     assert "<title>Brassworks</title>" in html and "<h1>Brassworks</h1>" in html
@@ -220,3 +247,70 @@ def test_locally_the_goodbye_page_shows_when_there_is_no_real_session(client):
 def test_an_expired_session_cookie_still_gets_the_goodbye_page(production, key):
     production.cookies.set("oidc_session", id_token(key).replace(id_token(key).split(".")[2], "bad"))
     assert production.get("/signed-out").status_code == 200
+
+
+# --- a person sees only the apps they have been let into ----------------------------------------------------------------
+
+
+def home_as(production, key, email="alice@example.com"):
+    production.cookies.set("oidc_session", id_token(key, email))
+    return production.get("/").text
+
+
+def test_someone_let_into_only_lists_sees_only_lists(production, key, apps_say):
+    apps_say.status = {"lists": 200, "trips": 403}
+    assert names(home_as(production, key)) == ["Lists"]
+
+
+def test_someone_let_into_only_trips_sees_only_trips(production, key, apps_say):
+    apps_say.status = {"lists": 403, "trips": 200}
+    assert names(home_as(production, key)) == ["Trips"]
+
+
+def test_someone_let_into_nothing_is_told_so_and_shown_no_apps(production, key, apps_say):
+    apps_say.status = {"lists": 403, "trips": 403}
+    html = home_as(production, key)
+    assert names(html) == [] and "You don't have access to any apps yet" in html and "invited" in html
+
+
+@pytest.mark.parametrize("answer", [401, 403, 404, 500, 503, 302, 204, requests.ConnectionError("down"), requests.Timeout("slow")])
+def test_anything_but_a_yes_hides_the_app_so_a_problem_never_shows_one_the_person_cannot_use(production, key, apps_say, answer):
+    apps_say.status = {"lists": answer, "trips": 200}
+    assert names(home_as(production, key)) == ["Trips"]
+
+
+def test_private_apps_are_never_offered_to_anyone_but_an_administrator(production, key, apps_say):
+    html = home_as(production, key)
+    assert "Finances" not in html and "Time" not in names(html) and "Plans" not in names(html) and "Flights" not in names(html)
+    assert not any(":8010" in c["url"] or ":8020" in c["url"] or ":8080" in c["url"] for c in apps_say.calls)  # nothing to ask them
+
+
+def test_an_administrator_sees_every_app_without_anything_being_asked(production, key, apps_say):
+    apps_say.status = {"lists": 403, "trips": 403}
+    assert names(home_as(production, key, "admin@example.com")) == [a["name"] for a in config.APPS]
+    assert apps_say.calls == []
+
+
+def test_the_apps_are_asked_on_this_machine_with_the_persons_own_cookie_and_redirects_are_never_followed(production, key, apps_say):
+    token = id_token(key, "alice@example.com")
+    production.cookies.set("oidc_session", token)
+    production.get("/")
+    assert sorted(c["url"] for c in apps_say.calls) == ["http://127.0.0.1:8030/api/me", "http://127.0.0.1:8060/api/me"]
+    for call in apps_say.calls:
+        assert call["headers"] == {"Cookie": f"oidc_session={token}"}
+        assert call["allow_redirects"] is False and call["timeout"] == config.APP_CHECK_TIMEOUT
+
+
+def test_nobody_elses_cookie_or_extra_cookies_are_forwarded(production, key, apps_say):
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    production.cookies.set("theme", "dark")
+    production.cookies.set("other_site", "secret")
+    production.get("/")
+    for call in apps_say.calls:
+        assert list(call["headers"]) == ["Cookie"] and call["headers"]["Cookie"].startswith("oidc_session=")
+        assert "secret" not in call["headers"]["Cookie"] and "theme" not in call["headers"]["Cookie"]
+
+
+def test_a_signed_out_visitor_causes_no_calls_to_the_apps(production, apps_say):
+    production.get("/")
+    assert apps_say.calls == []

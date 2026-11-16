@@ -8,11 +8,15 @@ The front door for every app, and (later) the landing page for all of them.
 parent domain (`.evancooperman.com`), so a single sign-in covers every app and one log out ends it
 everywhere. The other apps never see the client secret: they only check the cookie and send signed-out
 visitors here with the address they wanted (`OIDC_LOGIN_URL`, see `shared-python/README.md`).
-The home page shows a Sign in button when signed out, and the person's apps when signed in
-(administrators see all of `APPS` in `app/config.py`; everyone else only the ones marked `shared`).
+The home page shows a Sign in button when signed out, and the person's apps when signed in. Administrators see every
+app in `APPS` (`app/config.py`). Everyone else sees only the apps they have actually been let into: for the apps
+with accounts (lists, trips) the dashboard asks the app itself, on this machine, whether the person has an account
+(`app/access.py`: the app's own `/api/me`, with the person's own session cookie, redirects never followed); an app
+that says anything but yes, or doesn't answer, is left off. Private apps with no accounts (time, plans, finances,
+flights) are shown to administrators only. Someone let into nothing is told so.
 
-**Stage 2 (not built):** the landing page shows what each person can actually reach (each app's own
-default-deny access list), and becomes the place for per-app access grants and invites.
+**Stage 2 (partly built):** the landing page shows only what each person can actually reach (above). Still to come: a
+place for per-app access grants and invites.
 
 ## Run it locally
 

@@ -19,23 +19,33 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").sp
 if ENV != "production":
     ADMIN_EMAILS.add(DEV_USER_EMAIL)
 
-# The apps the landing page links to. `shared` = offered to every signed-in person (people can be
-# let into these); the rest are for the administrator only. Stage 2 will replace this static list
-# with what each person actually has access to.
+# The apps the landing page links to. `access` says who sees one:
+#   "member" - the app has its own accounts (lists, trips): a person sees it only if THAT app says they have an
+#              account (asked over localhost with their own session cookie, see app/access.py);
+#   "admin"  - a private app with no accounts: only the administrators see it.
+# Administrators see every app.
 APPS = [
     {"key": "lists", "name": "Lists", "host": "lists.evancooperman.com", "port": 8030, "icon": "list",
-     "blurb": "Gift ideas, shopping lists, anything worth keeping track of.", "shared": True},
+     "blurb": "Gift ideas, shopping lists, anything worth keeping track of.", "access": "member"},
     {"key": "trips", "name": "Trips", "host": "trips.evancooperman.com", "port": 8060, "icon": "compass",
-     "blurb": "Plan trips: places, activities, stays and the days between.", "shared": True},
+     "blurb": "Plan trips: places, activities, stays and the days between.", "access": "member"},
     {"key": "time", "name": "Time", "host": "time.evancooperman.com", "port": 8010, "icon": "calendar",
-     "blurb": "Time management.", "shared": False},
+     "blurb": "Time management.", "access": "admin"},
     {"key": "plans", "name": "Plans", "host": "plans.evancooperman.com", "port": 8020, "icon": "users",
-     "blurb": "Social plans.", "shared": False},
+     "blurb": "Social plans.", "access": "admin"},
     {"key": "finances", "name": "Finances", "host": "finances.evancooperman.com", "port": 8080, "icon": "wallet",
-     "blurb": "The household budget.", "shared": False},
+     "blurb": "The household budget.", "access": "admin"},
     {"key": "flights", "name": "Flights", "host": "flights.evancooperman.com", "port": 8050, "icon": "plane",
-     "blurb": "Flight market agents.", "shared": False},
+     "blurb": "Flight market agents.", "access": "admin"},
 ]
+
+# Where the dashboard asks a "member" app whether someone has an account: the app's own process on this machine
+# (never through the internet), the same addresses finances uses.
+APP_API_BASE = {
+    "lists": os.environ.get("LISTS_API_BASE", "http://127.0.0.1:8030"),
+    "trips": os.environ.get("TRIPS_API_BASE", "http://127.0.0.1:8060"),
+}
+APP_CHECK_TIMEOUT = 2  # seconds; an app that does not answer in time is left off the page
 
 
 def app_url(app: dict) -> str:
