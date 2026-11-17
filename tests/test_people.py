@@ -11,7 +11,7 @@ from app.main import app
 from tests.test_home import apps_say, id_token, key, production  # noqa: F401 - fixtures
 
 ADMIN = "admin@example.com"
-PORTS = {":8030": "lists", ":8060": "trips", ":8010": "time", ":8020": "plans", ":8080": "finances"}
+PORTS = {":8030": "lists", ":8060": "trips", ":8010": "time", ":8020": "plans", ":8080": "finances", ":8041": "resume"}
 
 
 class Apps:
@@ -150,10 +150,10 @@ def test_the_grid_merges_every_app_and_says_who_may_use_what(admin, apps):
     apps.put("finances", "bob@example.com")
     apps.put("lists", "legacy-owner@lists.invalid")  # a placeholder is never a person
     got = admin.get("/api/people").json()
-    assert [a["key"] for a in got["apps"]] == ["lists", "trips", "time", "plans", "finances"]
+    assert [a["key"] for a in got["apps"]] == ["lists", "trips", "time", "plans", "finances", "resume"]
     rows = {p["email"]: p["access"] for p in got["people"]}
     assert set(rows) == {ADMIN, "ann@example.com", "bob@example.com"}
-    assert rows["ann@example.com"] == {"lists": "active", "trips": "removed", "time": "none", "plans": "none", "finances": "none"}
+    assert rows["ann@example.com"] == {"lists": "active", "trips": "removed", "time": "none", "plans": "none", "finances": "none", "resume": "none"}
     assert rows[ADMIN]["lists"] == "admin" and rows["bob@example.com"]["finances"] == "active"
     assert got["problems"] == {}
 
@@ -195,7 +195,7 @@ def test_the_apps_are_called_on_this_machine_with_only_the_administrators_cookie
         assert call["headers"] == {"Cookie": cookie}
         assert call["allow_redirects"] is False
     # only the fixed localhost addresses: nothing the request said decides where they go
-    assert {c["app"] for c in apps.calls} == {"lists", "trips", "time", "plans", "finances"}
+    assert {c["app"] for c in apps.calls} == {"lists", "trips", "time", "plans", "finances", "resume"}
 
 
 def test_an_app_that_bounces_to_a_sign_in_is_a_problem_and_nothing_is_followed(admin, apps):
@@ -267,7 +267,7 @@ def test_ticking_a_box_lets_them_in_and_tells_them(admin, apps, mail):
 
 @pytest.mark.parametrize("app_key,method,suffix", [
     ("lists", "POST", "/revoke"), ("trips", "POST", "/revoke"),
-    ("time", "PATCH", ""), ("plans", "PATCH", ""), ("finances", "PATCH", ""),
+    ("time", "PATCH", ""), ("plans", "PATCH", ""), ("finances", "PATCH", ""), ("resume", "PATCH", ""),
 ])
 def test_unticking_removes_access_the_way_each_app_does_it(admin, apps, mail, app_key, method, suffix):
     apps.put(app_key, "ann@example.com")

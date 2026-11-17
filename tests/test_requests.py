@@ -46,9 +46,9 @@ def test_apps_that_say_no_account_are_offered_as_locked_tiles_and_the_ones_they_
     states(apps_say, lists=200)
     html = production.get("/").text
     assert names(html) == ["Lists"]
-    assert locked_names(html) == ["Trips", "Time", "Plans", "Finances"]
+    assert locked_names(html) == ["Trips", "Time", "Plans", "Finances", "Resume"]
     assert "Flights" not in html  # a private app is never even mentioned to someone who can't have it
-    assert html.count("data-request-app=") == 4
+    assert html.count("data-request-app=") == 5
 
 
 @pytest.mark.parametrize("answer", [401, 302, 404, 500, requests.ConnectionError("down"), requests.Timeout("slow")])
@@ -57,7 +57,7 @@ def test_an_app_that_cannot_say_is_never_offered_as_a_request(production, key, a
     states(apps_say, trips=answer)
     html = production.get("/").text
     assert "Trips" not in locked_names(html) and "Trips" not in names(html)  # (a real problem is shown in red instead; see test_home)
-    assert locked_names(html) == ["Lists", "Time", "Plans", "Finances"]
+    assert locked_names(html) == ["Lists", "Time", "Plans", "Finances", "Resume"]
 
 
 def test_the_administrator_is_never_offered_a_request(production, key, apps_say):  # noqa: F811
@@ -72,7 +72,7 @@ def test_a_waiting_request_and_a_declined_one_show_no_button(production, key, ap
     people.settle_requests(BOB, ["trips"], decline=True)
     html = production.get("/").text
     assert "Requested. Waiting for an administrator." in html and "wasn't approved" in html
-    assert html.count("data-request-app=") == 3  # not Lists, not Trips
+    assert html.count("data-request-app=") == 4  # not Lists, not Trips
 
 
 def test_the_administrator_is_told_on_the_home_page_how_many_are_waiting(production, key, apps_say):  # noqa: F811

@@ -20,7 +20,7 @@ if ENV != "production":
     ADMIN_EMAILS.add(DEV_USER_EMAIL)
 
 # The apps the landing page links to. `access` says who sees one:
-#   "member" - the app has its own accounts (lists, trips, time, plans, finances): a person sees it only if THAT app says they
+#   "member" - the app has its own accounts (lists, trips, time, plans, finances, resume): a person sees it only if THAT app says they
 #              have an account (asked over localhost with their own session cookie, see app/access.py);
 #   "admin"  - a private app with no accounts yet (flights): only the administrators see it.
 # Administrators see every app.
@@ -35,6 +35,8 @@ APPS = [
      "blurb": "Places and ideas to do, saved from around the web.", "access": "member"},
     {"key": "finances", "name": "Finances", "host": "finances.evancooperman.com", "port": 8080, "icon": "wallet",
      "blurb": "The household budget.", "access": "member"},
+    {"key": "resume", "name": "Resume", "host": "resume-admin.evancooperman.com", "port": 8041, "icon": "briefcase",
+     "blurb": "Build your resume and keep it up to date.", "access": "member"},
     {"key": "flights", "name": "Flights", "host": "flights.evancooperman.com", "port": 8050, "icon": "plane",
      "blurb": "Flight market agents.", "access": "admin"},
 ]
@@ -47,6 +49,7 @@ APP_API_BASE = {
     "time": os.environ.get("TIME_API_BASE", "http://127.0.0.1:8010"),
     "plans": os.environ.get("PLANS_API_BASE", "http://127.0.0.1:8020"),
     "finances": os.environ.get("FINANCES_API_BASE", "http://127.0.0.1:8080"),
+    "resume": os.environ.get("RESUME_API_BASE", "http://127.0.0.1:8041"),  # the resume ADMIN app (8041), not the public site
 }
 APP_CHECK_TIMEOUT = 2  # seconds; an app that does not answer in time is left off the page
 
@@ -64,6 +67,7 @@ APP_USERS = {
     "time": {"route": "/api/users", "revoke": "patch"},
     "plans": {"route": "/api/users", "revoke": "patch"},
     "finances": {"route": "/api/users", "revoke": "patch"},
+    "resume": {"route": "/api/users", "revoke": "patch"},
 }
 APP_CALL_TIMEOUT = 10  # seconds, for changes (a slow app is reported, not waited on forever)
 

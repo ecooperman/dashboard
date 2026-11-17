@@ -56,13 +56,13 @@ class AppAnswers:
     """Stands in for lists and trips answering /api/me on this machine; records every call."""
 
     def __init__(self):
-        self.status = {"lists": 200, "trips": 200, "time": 200, "plans": 200, "finances": 200}  # or an exception instance to raise
+        self.status = {"lists": 200, "trips": 200, "time": 200, "plans": 200, "finances": 200, "resume": 200}  # or an exception instance to raise
         self.calls = []
 
     def get(self, url, headers=None, timeout=None, allow_redirects=True):
         self.calls.append({"url": url, "headers": headers, "timeout": timeout, "allow_redirects": allow_redirects})
-        app = "lists" if ":8030" in url else "trips" if ":8060" in url else "time" if ":8010" in url else "plans" if ":8020" in url else "finances" if ":8080" in url else "other"
-        answer = self.status.get(app, 500)
+        app = "lists" if ":8030" in url else "trips" if ":8060" in url else "time" if ":8010" in url else "plans" if ":8020" in url else "finances" if ":8080" in url else "resume" if ":8041" in url else "other"
+        answer = self.status.get(app, 403)  # an app a test does not mention says 'no account'
         if isinstance(answer, Exception):
             raise answer
 
@@ -113,7 +113,7 @@ def test_a_signed_out_visitor_gets_a_sign_in_button_and_no_apps(production):
 def test_an_ordinary_signed_in_person_sees_the_apps_that_say_they_have_an_account(production, key, apps_say):
     production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
     html = production.get("/").text
-    assert names(html) == ["Lists", "Trips", "Time", "Plans", "Finances"]
+    assert names(html) == ["Lists", "Trips", "Time", "Plans", "Finances", "Resume"]
     assert "https://lists.evancooperman.com/" in html and "https://finances.evancooperman.com/" in html and "localhost" not in html
 
 
@@ -315,7 +315,7 @@ def test_an_app_with_a_real_problem_is_shown_in_red_and_never_as_usable_or_as_on
     assert problem_names(html) == ["Trips"] and names(html) == [] and "Trips" not in locked_names(html)
     assert "Couldn't check your access just now" in html and "reload this page in a minute" in html.lower()
     assert "You don't have access to any apps yet" not in html  # they may have access: we just could not tell
-    assert html.count("data-request-app=") == 4  # the other four can still be asked for; not the one with the problem
+    assert html.count("data-request-app=") == 5  # the other five can still be asked for; not the one with the problem
 
 
 @pytest.mark.parametrize("answer", [401, 302, 303, 307])
@@ -329,7 +329,7 @@ def test_an_app_that_does_not_recognise_their_sign_in_is_just_left_off_not_calle
 def test_a_no_answer_is_still_a_plain_no_and_a_yes_is_still_a_yes(production, key, apps_say):
     apps_say.status = {"lists": 200, "trips": 403, "time": 500, "plans": 403, "finances": 403}
     html = home_as(production, key)
-    assert names(html) == ["Lists"] and locked_names(html) == ["Trips", "Plans", "Finances"] and problem_names(html) == ["Time"]
+    assert names(html) == ["Lists"] and locked_names(html) == ["Trips", "Plans", "Finances", "Resume"] and problem_names(html) == ["Time"]
 
 
 def test_the_message_names_every_app_with_a_problem(production, key, apps_say):
@@ -389,8 +389,8 @@ def test_the_apps_are_asked_on_this_machine_with_the_persons_own_cookie_and_redi
     production.cookies.set("oidc_session", token)
     production.get("/")
     assert sorted(c["url"] for c in apps_say.calls) == [
-        "http://127.0.0.1:8010/api/me", "http://127.0.0.1:8020/api/me", "http://127.0.0.1:8030/api/me", "http://127.0.0.1:8060/api/me",
-        "http://127.0.0.1:8080/api/me",
+        "http://127.0.0.1:8010/api/me", "http://127.0.0.1:8020/api/me", "http://127.0.0.1:8030/api/me", "http://127.0.0.1:8041/api/me",
+        "http://127.0.0.1:8060/api/me", "http://127.0.0.1:8080/api/me",
     ]
     for call in apps_say.calls:
         assert call["headers"] == {"Cookie": f"oidc_session={token}"}
