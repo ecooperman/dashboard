@@ -55,12 +55,12 @@ class AppAnswers:
     """Stands in for lists and trips answering /api/me on this machine; records every call."""
 
     def __init__(self):
-        self.status = {"lists": 200, "trips": 200, "plans": 200}  # or an exception instance to raise
+        self.status = {"lists": 200, "trips": 200, "time": 200, "plans": 200}  # or an exception instance to raise
         self.calls = []
 
     def get(self, url, headers=None, timeout=None, allow_redirects=True):
         self.calls.append({"url": url, "headers": headers, "timeout": timeout, "allow_redirects": allow_redirects})
-        app = "lists" if ":8030" in url else "trips" if ":8060" in url else "plans" if ":8020" in url else "other"
+        app = "lists" if ":8030" in url else "trips" if ":8060" in url else "time" if ":8010" in url else "plans" if ":8020" in url else "other"
         answer = self.status.get(app, 500)
         if isinstance(answer, Exception):
             raise answer
@@ -101,7 +101,7 @@ def test_a_signed_out_visitor_gets_a_sign_in_button_and_no_apps(production):
 def test_an_ordinary_signed_in_person_sees_the_apps_that_say_they_have_an_account(production, key, apps_say):
     production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
     html = production.get("/").text
-    assert names(html) == ["Lists", "Trips", "Plans"]
+    assert names(html) == ["Lists", "Trips", "Time", "Plans"]
     assert "https://lists.evancooperman.com/" in html and "https://plans.evancooperman.com/" in html and "localhost" not in html
     assert "finances" not in html.lower().replace("your apps", "")
 
@@ -258,40 +258,45 @@ def home_as(production, key, email="alice@example.com"):
 
 
 def test_someone_let_into_only_lists_sees_only_lists(production, key, apps_say):
-    apps_say.status = {"lists": 200, "trips": 403, "plans": 403}
+    apps_say.status = {"lists": 200, "trips": 403, "time": 403, "plans": 403}
     assert names(home_as(production, key)) == ["Lists"]
 
 
 def test_someone_let_into_only_trips_sees_only_trips(production, key, apps_say):
-    apps_say.status = {"lists": 403, "trips": 200, "plans": 403}
+    apps_say.status = {"lists": 403, "trips": 200, "time": 403, "plans": 403}
     assert names(home_as(production, key)) == ["Trips"]
 
 
 def test_someone_let_into_only_plans_sees_only_plans(production, key, apps_say):
-    apps_say.status = {"lists": 403, "trips": 403, "plans": 200}
+    apps_say.status = {"lists": 403, "trips": 403, "time": 403, "plans": 200}
     assert names(home_as(production, key)) == ["Plans"]
 
 
+def test_someone_let_into_only_time_sees_only_time(production, key, apps_say):
+    apps_say.status = {"lists": 403, "trips": 403, "time": 200, "plans": 403}
+    assert names(home_as(production, key)) == ["Time"]
+
+
 def test_someone_let_into_nothing_is_told_so_and_shown_no_apps(production, key, apps_say):
-    apps_say.status = {"lists": 403, "trips": 403, "plans": 403}
+    apps_say.status = {"lists": 403, "trips": 403, "time": 403, "plans": 403}
     html = home_as(production, key)
     assert names(html) == [] and "You don't have access to any apps yet" in html and "invited" in html
 
 
 @pytest.mark.parametrize("answer", [401, 403, 404, 500, 503, 302, 204, requests.ConnectionError("down"), requests.Timeout("slow")])
 def test_anything_but_a_yes_hides_the_app_so_a_problem_never_shows_one_the_person_cannot_use(production, key, apps_say, answer):
-    apps_say.status = {"lists": answer, "trips": 200, "plans": answer}
+    apps_say.status = {"lists": answer, "trips": 200, "time": answer, "plans": answer}
     assert names(home_as(production, key)) == ["Trips"]
 
 
 def test_private_apps_are_never_offered_to_anyone_but_an_administrator(production, key, apps_say):
     html = home_as(production, key)
-    assert "Finances" not in html and "Time" not in names(html) and "Flights" not in names(html)
-    assert not any(":8010" in c["url"] or ":8050" in c["url"] or ":8080" in c["url"] for c in apps_say.calls)  # nothing to ask them
+    assert "Finances" not in html and "Flights" not in names(html)
+    assert not any(":8050" in c["url"] or ":8080" in c["url"] for c in apps_say.calls)  # nothing to ask them
 
 
 def test_an_administrator_sees_every_app_without_anything_being_asked(production, key, apps_say):
-    apps_say.status = {"lists": 403, "trips": 403, "plans": 403}
+    apps_say.status = {"lists": 403, "trips": 403, "time": 403, "plans": 403}
     assert names(home_as(production, key, "admin@example.com")) == [a["name"] for a in config.APPS]
     assert apps_say.calls == []
 
@@ -301,7 +306,7 @@ def test_the_apps_are_asked_on_this_machine_with_the_persons_own_cookie_and_redi
     production.cookies.set("oidc_session", token)
     production.get("/")
     assert sorted(c["url"] for c in apps_say.calls) == [
-        "http://127.0.0.1:8020/api/me", "http://127.0.0.1:8030/api/me", "http://127.0.0.1:8060/api/me",
+        "http://127.0.0.1:8010/api/me", "http://127.0.0.1:8020/api/me", "http://127.0.0.1:8030/api/me", "http://127.0.0.1:8060/api/me",
     ]
     for call in apps_say.calls:
         assert call["headers"] == {"Cookie": f"oidc_session={token}"}
