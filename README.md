@@ -1,7 +1,7 @@
 # dashboard
 
 The front door for every app, and (later) the landing page for all of them.
-`dashboard.evancooperman.com`, port **8090**, no database.
+`dashboard.evancooperman.com`, port **8090**. The only data it keeps is people's first and last names (`people.db`, created on first use).
 
 **Stage 1 (built):** it does the signing in, through the identity provider (Auth0): `/auth/login`,
 `/auth/callback`, `/auth/logout` from `shared_python.oidc_login`. It sets one session cookie for the whole
@@ -15,8 +15,12 @@ with accounts (lists, trips) the dashboard asks the app itself, on this machine,
 that says anything but yes, or doesn't answer, is left off. Private apps with no accounts (time, plans, finances,
 flights) are shown to administrators only. Someone let into nothing is told so.
 
-**Stage 2 (partly built):** the landing page shows only what each person can actually reach (above). Still to come: a
-place for per-app access grants and invites.
+**Stage 2 (partly built):** the landing page shows only what each person can actually reach (above). The **People** page
+(`/users.html`, administrators only, `app/people.py`) is the one place to add someone and tick which apps they may use, with
+their first and last name; ticking or unticking drives each app's own administrator Users routes AS the signed-in administrator (their own
+cookie, fixed localhost addresses, no redirects followed, no extra secret), so each app stays the source of truth and checks for
+itself. A person is emailed once for everything. Everyone can set their own name on the home page. Still to come: invites an ordinary person
+can ask for, and the apps' own Users pages becoming links here.
 
 ## Run it locally
 

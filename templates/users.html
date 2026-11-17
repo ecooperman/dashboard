@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-ui="v2">
+<head>
+  <title>People - Brassworks</title>
+{% include "_head.html" %}
+</head>
+<body>
+  <header class="app-header">
+    <h1>People</h1>
+    <p class="subtitle"><a href="/">Back to your apps</a></p>
+  </header>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="section">
+      <h2>Add someone</h2>
+      <p class="field-hint">Lets them into the apps you tick, and emails them once. You can change the ticks any time below. Their name is only so you can tell people apart.</p>
+      <div id="add-person"></div>
+    </section>
+
+    <section class="section">
+      <h2>Who can use what</h2>
+      <p class="field-hint">Ticking gives access, unticking takes it away (nothing of theirs is deleted, and ticking again puts it all back). Administrators always keep access. Permanently deleting a removed person's data is still done in that app's own Users page.</p>
+      <div id="people"></div>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/people.js"></script>
+</body>
+</html>

@@ -53,3 +53,23 @@ APP_CHECK_TIMEOUT = 2  # seconds; an app that does not answer in time is left of
 
 def app_url(app: dict) -> str:
     return f"https://{app['host']}/" if ENV == "production" else f"http://localhost:{app['port']}/"
+
+
+# The central Users page (app/people.py) drives each member app's own administrator routes, as the signed-in administrator
+# (their own session cookie, sent to the fixed localhost addresses above and nowhere else). Where each app's list-and-add
+# route is, and how it removes someone: "action" apps have POST <route>/{id}/revoke, the others PATCH <route>/{id} with a status.
+APP_USERS = {
+    "lists": {"route": "/api/admin/users", "revoke": "action"},
+    "trips": {"route": "/api/admin/users", "revoke": "action"},
+    "time": {"route": "/api/users", "revoke": "patch"},
+    "plans": {"route": "/api/users", "revoke": "patch"},
+    "finances": {"route": "/api/users", "revoke": "patch"},
+}
+APP_CALL_TIMEOUT = 10  # seconds, for changes (a slow app is reported, not waited on forever)
+
+# First and last names (the dashboard is where they live; the apps' Add-box suggestions read this file read-only). Never
+# needed to sign in. Kept in the dashboard's own folder so shared_python.directory finds it next to the other apps.
+PEOPLE_DB = os.environ.get("PEOPLE_DB") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "people.db")
+
+# Where the email tells a newly added person to go.
+DASHBOARD_URL = "https://dashboard.evancooperman.com/" if ENV == "production" else f"http://localhost:{PORT}/"
