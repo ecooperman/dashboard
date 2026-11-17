@@ -183,8 +183,8 @@ function row(person) {
 function buildAddForm() {
   const attrs = { autocomplete: "off", "data-1p-ignore": "", "data-lpignore": "true", "data-bwignore": "true", "data-form-type": "other" };
   const email = Global.el("input", { type: "email", placeholder: "Email address", "aria-label": "Email address of the person to add", ...attrs });
-  const first = Global.el("input", { type: "text", placeholder: "First name (optional)", maxlength: "60", "aria-label": "First name", ...attrs });
-  const last = Global.el("input", { type: "text", placeholder: "Last name (optional)", maxlength: "60", "aria-label": "Last name", ...attrs });
+  const first = Global.el("input", { type: "text", placeholder: "First name", maxlength: "60", "aria-label": "First name", ...attrs });
+  const last = Global.el("input", { type: "text", placeholder: "Last name", maxlength: "60", "aria-label": "Last name", ...attrs });
   // Most people get everything, so every app starts ticked.
   const boxes = data.apps.map((a) => {
     const box = Global.el("input", { type: "checkbox" });

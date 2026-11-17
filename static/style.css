@@ -1,9 +1,24 @@
 /* Only what is specific to the dashboard; the look and feel is the shared theme. */
 
+/* Breathing room: the shared theme leaves a page's sections touching, so each one gets space above it, and a heading sits
+   close to the line that explains it. */
+.section + .section {
+  margin-top: 36px;
+}
+
+.section > h2 + p {
+  margin-top: 0;
+}
+
+.section > .field-hint {
+  margin-bottom: 14px;
+}
+
 .app-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 12px;
+  gap: 14px;
+  margin-top: 14px;
 }
 
 .app-tile {
@@ -11,8 +26,9 @@
   grid-template-columns: auto 1fr;
   grid-template-areas: "icon name" "blurb blurb";
   align-items: center;
+  align-content: start;  /* tiles in a row are as tall as the tallest: keep each one's content at the top, not floating */
   gap: 6px 10px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -53,6 +69,7 @@
 .app-tile-ask {
   grid-column: 1 / -1;
   justify-self: start;
+  margin-top: 6px;
 }
 
 .app-tile-blurb {
@@ -111,7 +128,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  margin: 10px 0;
+  margin: 14px 0;
 }
 
 .people-app-choice {
@@ -155,7 +172,7 @@
 
 /* --- requests waiting for the administrator --- */
 .request-card {
-  padding: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
