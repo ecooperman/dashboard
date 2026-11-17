@@ -190,7 +190,7 @@ def test_the_apps_are_called_on_this_machine_with_only_the_administrators_cookie
     admin.get("/api/people")
     admin.post("/api/people", json={"email": "new@example.com", "apps": ["lists", "finances"]})
     assert apps.calls
-    cookie = f"oidc_session={id_token(key, ADMIN)}"
+    cookie = f"oidc_session={admin.cookies.get('oidc_session')}"  # the one the browser holds (not re-made: tokens differ by the second)
     for call in apps.calls:
         assert call["headers"] == {"Cookie": cookie}
         assert call["allow_redirects"] is False

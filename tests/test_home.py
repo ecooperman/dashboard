@@ -1,6 +1,7 @@
 """The dashboard: the landing page, who it shows what, and that it really is the front door
 (signing in through the identity provider and handing people back to their app with a cookie that
 covers every subdomain). The sign-in mechanics are tested in shared-python; this checks the wiring."""
+import re
 import time
 from urllib.parse import parse_qs, urlparse
 
@@ -79,7 +80,13 @@ def apps_say(monkeypatch):
 
 
 def names(html):
-    return [a["name"] for a in config.APPS if f">{a['name']}</span>" in html]
+    """The apps shown as real, clickable tiles."""
+    return [a["name"] for a in config.APPS if re.search(rf'<a class="app-tile"[^>]*>(?:(?!</a>).)*>{a["name"]}</span>', html, re.S)]
+
+
+def locked_names(html):
+    """The apps shown as locked tiles the person could ask for."""
+    return [a["name"] for a in config.APPS if re.search(rf'app-tile is-locked(?:(?!</div>).)*>{a["name"]}</span>', html, re.S)]
 
 
 # --- the landing page --------------------------------------------------------------------

@@ -41,6 +41,20 @@
   font-weight: 600;
 }
 
+.app-tile.is-locked {
+  background: transparent;
+  border-style: dashed;
+}
+
+.app-tile.is-locked .app-tile-icon {
+  color: var(--muted);
+}
+
+.app-tile-ask {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
 .app-tile-blurb {
   grid-area: blurb;
   color: var(--muted);
@@ -137,4 +151,32 @@
   .people-cell::after {
     content: " " attr(data-label);
   }
+}
+
+/* --- requests waiting for the administrator --- */
+.request-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 10px;
+}
+
+.request-note {
+  margin: 6px 0;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.request-apps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0;
+}
+
+.request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

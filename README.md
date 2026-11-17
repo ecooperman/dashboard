@@ -1,7 +1,7 @@
 # dashboard
 
 The front door for every app, and (later) the landing page for all of them.
-`dashboard.evancooperman.com`, port **8090**. The only data it keeps is people's first and last names (`people.db`, created on first use).
+`dashboard.evancooperman.com`, port **8090**. The only data it keeps is people's first and last names and the requests for access (`people.db`, created on first use).
 
 **Stage 1 (built):** it does the signing in, through the identity provider (Auth0): `/auth/login`,
 `/auth/callback`, `/auth/logout` from `shared_python.oidc_login`. It sets one session cookie for the whole
@@ -19,8 +19,16 @@ flights) are shown to administrators only. Someone let into nothing is told so.
 (`/users.html`, administrators only, `app/people.py`) is the one place to add someone and tick which apps they may use, with
 their first and last name; ticking or unticking drives each app's own administrator Users routes AS the signed-in administrator (their own
 cookie, fixed localhost addresses, no redirects followed, no extra secret), so each app stays the source of truth and checks for
-itself. A person is emailed once for everything. Everyone can set their own name on the home page. Still to come: invites an ordinary person
-can ask for, and the apps' own Users pages becoming links here.
+itself. A person is emailed once for everything. Everyone can set their own name on the home page.
+
+**Requests for access:** an app that answers 403 ("no account") to a signed-in person's `/api/me` shows on their home page as a
+locked tile with a **Request access** button (an app that doesn't answer, or answers anything else, is left off, so nobody is
+offered a request for something they may already have). `POST /api/requests` files it under the address in their own verified
+session (never from the request body), after re-asking the app; one request per person per app, a decline is final, at most
+100 wait at once, an optional 300-character note. The administrator is told through the usual `notify` channels (ntfy, Pushover,
+`NOTIFY_EMAIL`) and sees a **Requests** list on the People page: tick which apps to allow, **Approve** (same `grant()` as
+ticking a box, one email) and whatever is left unticked is declined; an app that can't be reached keeps its request waiting.
+Still to come: the apps' own Users pages becoming links here.
 
 ## Run it locally
 

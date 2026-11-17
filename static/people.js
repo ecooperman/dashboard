@@ -3,6 +3,7 @@ Global.mountUserBadge();
 
 const addEl = document.getElementById("add-person");
 const listEl = document.getElementById("people");
+const requestsEl = document.getElementById("requests");
 
 async function api(path, method, body) {
   return Global.fetchJSON(`/api/people${path}`, {
@@ -18,7 +19,7 @@ function displayName(p) {
 
 // --- the grid -----------------------------------------------------------------------------------------------------
 
-let data = { apps: [], people: [], problems: {} };
+let data = { apps: [], people: [], problems: {}, requests: [] };
 
 async function load() {
   try {
@@ -28,7 +29,70 @@ async function load() {
     return;
   }
   render();
+  renderRequests();
   buildAddForm();
+}
+
+// --- requests waiting ------------------------------------------------------------------------------------------------
+
+function renderRequests() {
+  if (!data.requests.length) {
+    requestsEl.replaceChildren(Global.el("p", { class: "field-hint", text: "Nobody is waiting." }));
+    return;
+  }
+  requestsEl.replaceChildren(...data.requests.map(requestCard));
+}
+
+function requestCard(req) {
+  const who = displayName(req);
+  const boxes = req.apps.map((a) => {
+    const box = Global.el("input", { type: "checkbox" });
+    box.checked = true;
+    const label = Global.el("label", { class: "people-app-choice" }, [
+      box,
+      document.createTextNode(` ${a.name}${a.previously === "removed" ? " (their access was removed before)" : ""}`),
+    ]);
+    return { app: a, box, label };
+  });
+  const approve = Global.el("button", { type: "button", class: "save-btn", text: "Approve" });
+  const decline = Global.el("button", { type: "button", class: "cancel-btn", text: "Decline" });
+  const sync = () => (approve.disabled = !boxes.some((b) => b.box.checked));
+  boxes.forEach((b) => b.box.addEventListener("change", sync));
+
+  async function decide(approved) {
+    approve.disabled = decline.disabled = true;
+    try {
+      const done = await Global.fetchJSON("/api/requests/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: req.email, approve: approved }),
+      });
+      const parts = [];
+      if (done.added.length) parts.push(`${who || req.email} can now use ${done.added.join(", ")}.`);
+      if (!approved.length) parts.push(`Declined ${who || req.email}.`);
+      if (done.failed.length) parts.push(`Problems (left waiting): ${done.failed.join("; ")}.`);
+      Global.showMessage(parts.join(" "), done.failed.length ? "error" : "success");
+      await load();
+    } catch (err) {
+      Global.showMessage(err.message, "error");
+      approve.disabled = decline.disabled = false;
+      sync();
+    }
+  }
+  approve.addEventListener("click", () => decide(boxes.filter((b) => b.box.checked).map((b) => b.app.key)));
+  decline.addEventListener("click", () => {
+    if (confirm(`Turn down ${who || req.email}? They won't be able to ask again.`)) decide([]);
+  });
+
+  const card = Global.el("div", { class: "request-card" }, [
+    Global.el("strong", { text: who || req.email }),
+    ...(who ? [Global.el("div", { class: "field-hint", text: req.email })] : []),
+    ...(req.note ? [Global.el("p", { class: "request-note", text: `"${req.note}"` })] : []),
+    Global.el("div", { class: "request-apps" }, [Global.el("span", { class: "field-hint", text: "Asked for:" }), ...boxes.map((b) => b.label)]),
+    Global.el("div", { class: "request-actions" }, [approve, decline]),
+  ]);
+  Global.iconifyButtons && Global.iconifyButtons(card);
+  return card;
 }
 
 function render() {

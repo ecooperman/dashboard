@@ -30,6 +30,32 @@
       </div>
     </section>
 
+    {% if locked %}
+    <section class="section" id="more-apps">
+      <h2>More apps</h2>
+      <p class="field-hint">You don't have these yet. Ask for the ones you'd like, and an administrator will see your request. You'll get an email if you're let in.</p>
+      <div class="people-name-form">
+        <input type="text" id="request-note" maxlength="300" placeholder="Anything you'd like them to know? (optional)" aria-label="A note for the administrator" autocomplete="off">
+      </div>
+      <div class="app-tiles">
+        {% for app in locked %}
+        <div class="app-tile is-locked">
+          <span class="app-tile-icon" data-icon="lock" aria-hidden="true"></span>
+          <span class="app-tile-name">{{ app.name }}</span>
+          <span class="app-tile-blurb">{{ app.blurb }}</span>
+          {% if app.request == "pending" %}
+          <span class="app-tile-ask field-hint">Requested. Waiting for an administrator.</span>
+          {% elif app.request == "declined" %}
+          <span class="app-tile-ask field-hint">Your request wasn't approved.</span>
+          {% else %}
+          <button type="button" class="secondary-btn app-tile-ask" data-btn-icon="unlock" data-request-app="{{ app.key }}">Request access</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     <section class="section">
       <h2>Your name</h2>
       <p class="field-hint">So the people who let you in can tell who you are. It is never needed to sign in.</p>
@@ -39,6 +65,7 @@
     <section class="section">
       <h2>People</h2>
       <p><a class="secondary-btn" data-btn-icon="users" href="/users.html">Manage who can use what</a></p>
+      {% if waiting %}<p class="field-hint" id="waiting-note">{{ waiting }} request{{ "" if waiting == 1 else "s" }} waiting for you.</p>{% endif %}
     </section>
     {% endif %}
   </main>

@@ -98,6 +98,16 @@ class NameChange(NameBody):
     email: str
 
 
+class RequestBody(BaseModel):
+    apps: List[str]
+    note: Optional[str] = None
+
+
+class Decision(BaseModel):
+    email: str
+    approve: List[str]  # the apps to let them into; every other app they were waiting on is turned down
+
+
 def _app(key: str) -> dict:
     found = next((a for a in people.member_apps() if a["key"] == key), None)
     if found is None:
@@ -125,7 +135,59 @@ def users_page(request: Request):
 @app.get("/api/people")
 def get_people(request: Request):
     admin_email(request)
-    return people.overview(session_cookie(request))
+    data = people.overview(session_cookie(request))
+    data["requests"] = people.waiting_requests(data["people"])
+    return data
+
+
+@app.post("/api/requests/decide")
+def decide_request(body: Decision, request: Request, background: BackgroundTasks):
+    """Approve some of what a person asked for (the same as ticking those boxes: one email) and turn down the rest. An app
+    that could not be reached stays waiting, so nothing is lost."""
+    admin = admin_email(request)
+    email = body.email.strip().lower()
+    waiting = people.requests_for(email)
+    if not waiting:
+        raise HTTPException(status_code=404, detail="Nobody is waiting under that address")
+    approve = [_app(key) for key in dict.fromkeys(body.approve)]
+    if any(target["key"] not in waiting for target in approve):
+        raise HTTPException(status_code=400, detail="They didn't ask for that app")
+    cookie = session_cookie(request)
+    added, failed, let_in = [], [], []
+    for target in approve:
+        try:
+            if people.grant(target, email, cookie) == "added":
+                added.append(target["name"])
+            let_in.append(target["key"])
+        except people.AppProblem as exc:
+            failed.append(str(exc))  # that one stays waiting
+    people.settle_requests(email, let_in)
+    people.settle_requests(email, [key for key in waiting if key not in {t["key"] for t in approve}], decline=True)
+    if added:
+        background.add_task(people.tell_them, email, admin, added)
+    return {"added": added, "failed": failed}
+
+
+@app.post("/api/requests")
+def ask_for_access(body: RequestBody, request: Request, background: BackgroundTasks):
+    """The signed-in person asks for the apps they have no account in. The address is the one they signed in with."""
+    email = signed_in_email(request)
+    states = access.account_states(request, email)
+    wanted = list(dict.fromkeys(body.apps))
+    if not wanted:
+        raise HTTPException(status_code=400, detail="Choose at least one app")
+    for key in wanted:
+        if states.get(key) != "no":  # only an app that says they have no account (not one they have, or one that did not answer)
+            raise HTTPException(status_code=400, detail="You can't ask for that app")
+    try:
+        filed, already = people.file_requests(email, wanted, body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OverflowError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    if filed:
+        background.add_task(people.tell_administrators, email, [_app(k)["name"] for k in filed], people.clean_note(body.note))
+    return {"filed": filed, "already": already}
 
 
 @app.post("/api/people")
@@ -148,6 +210,7 @@ def add_person(body: PersonAdd, request: Request, background: BackgroundTasks):
             failed.append(str(exc))
     if first or last:
         people.set_name(email, first, last)
+    people.settle_requests(email, [t["key"] for t in chosen if t["name"] in added or t["name"] in already])
     if added:
         background.add_task(people.tell_them, email, admin, added)
     return {"email": email, "added": added, "already": already, "failed": failed}
@@ -163,6 +226,7 @@ def change_access(body: AccessChange, request: Request, background: BackgroundTa
     try:
         if body.enabled:
             result = people.grant(target, email, cookie)
+            people.settle_requests(email, [target["key"]])  # let in by hand, so any request for it is finished
             if result == "added":
                 background.add_task(people.tell_them, email, admin, [target["name"]])
         else:
@@ -204,9 +268,14 @@ def index(request: Request):
         if exc.status_code != 401:
             raise  # 503: sign-in isn't configured on the server
         return templates.TemplateResponse(request, "signed_out.html", base)
-    apps = access.apps_for(request, email)
+    apps, locked = access.apps_and_locked(request, email)
+    asked = people.request_states(email)
+    for app_ in locked:
+        app_["request"] = asked.get(app_["key"], "")  # "", "pending" or "declined"
+    is_admin = email in config.ADMIN_EMAILS
     return templates.TemplateResponse(
-        request, "index.html", {**base, "email": email, "apps": apps, "is_admin": email in config.ADMIN_EMAILS}
+        request, "index.html",
+        {**base, "email": email, "apps": apps, "locked": locked, "is_admin": is_admin, "waiting": people.waiting_count() if is_admin else 0},
     )
 
 

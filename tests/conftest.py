@@ -13,6 +13,14 @@ SIGN_IN_SETTINGS = (
 
 
 @pytest.fixture(autouse=True)
+def _people_file_is_a_throwaway(monkeypatch, tmp_path):
+    """Names and requests live in a SQLite file; a test must never touch the real one on this machine."""
+    from app import config
+
+    monkeypatch.setattr(config, "PEOPLE_DB", str(tmp_path / "people.db"))
+
+
+@pytest.fixture(autouse=True)
 def _nothing_leaves_the_machine(monkeypatch):
     for name in SIGN_IN_SETTINGS:
         monkeypatch.setattr(settings, name, None)

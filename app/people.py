@@ -11,6 +11,7 @@ First and last names live here, in a tiny SQLite file of their own (never needed
 import logging
 import re
 import sqlite3
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from typing import Dict, List, Optional, Tuple
@@ -23,6 +24,8 @@ from . import config
 log = logging.getLogger(__name__)
 
 NAME_MAX = 60
+NOTE_MAX = 300
+MAX_WAITING = 100  # requests waiting at once: anyone can sign up, so the queue (and the administrator's page) is bounded
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -37,6 +40,10 @@ def _connect() -> sqlite3.Connection:
     connection = sqlite3.connect(config.PEOPLE_DB, timeout=5)
     connection.execute(
         "CREATE TABLE IF NOT EXISTS names (email TEXT PRIMARY KEY, first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '')"
+    )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS access_requests (email TEXT NOT NULL, app TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', "
+        "status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, PRIMARY KEY (email, app))"
     )
     return connection
 
@@ -72,6 +79,108 @@ def set_name(email: str, first: Optional[str], last: Optional[str]) -> Tuple[str
         else:
             connection.execute("DELETE FROM names WHERE email = ?", (email,))
     return first, last
+
+
+# --- requests for access ---------------------------------------------------------------------------------------------------
+# A signed-in person (so a verified email, taken from their session and never from the request) can ask for an app they have no
+# account in. The request is only a row here; nothing opens until an administrator approves it, and approving goes through the
+# same grant() as ticking a box. A declined request stays on file, so a person cannot ask again and again.
+
+
+def clean_note(value: Optional[str]) -> str:
+    text = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", value or "")).strip()
+    if len(text) > NOTE_MAX:
+        raise ValueError(f"A note can be at most {NOTE_MAX} characters")
+    return text
+
+
+def request_states(email: str) -> Dict[str, str]:
+    """app key -> "pending" or "declined", for this person's own requests."""
+    with closing(_connect()) as connection:
+        return dict(connection.execute("SELECT app, status FROM access_requests WHERE email = ?", (email.strip().lower(),)))
+
+
+def file_requests(email: str, app_keys: List[str], note: Optional[str]) -> Tuple[List[str], List[str]]:
+    """Ask for each app that has no request from this person yet. Returns (filed, already): `already` are the apps whose
+    request is on file (waiting or declined), which are left exactly as they are. Raises ValueError for a bad note and
+    OverflowError when too many requests are already waiting."""
+    email = email.strip().lower()
+    note = clean_note(note)
+    filed, already = [], []
+    with closing(_connect()) as connection, connection:
+        have = {app for (app,) in connection.execute("SELECT app FROM access_requests WHERE email = ?", (email,))}
+        waiting = connection.execute("SELECT COUNT(*) FROM access_requests WHERE status = 'pending'").fetchone()[0]
+        for key in dict.fromkeys(app_keys):
+            if key in have:
+                already.append(key)
+                continue
+            if waiting >= MAX_WAITING:
+                raise OverflowError("Too many requests are waiting right now. Please try again later.")
+            connection.execute(
+                "INSERT INTO access_requests (email, app, note, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+                (email, key, note, int(time.time())),
+            )
+            waiting += 1
+            filed.append(key)
+    return filed, already
+
+
+def waiting_count() -> int:
+    with closing(_connect()) as connection:
+        return connection.execute("SELECT COUNT(*) FROM access_requests WHERE status = 'pending'").fetchone()[0]
+
+
+def waiting_requests(overview_people: List[dict]) -> List[dict]:
+    """The pending requests, one entry per person, oldest first: {email, first_name, last_name, note, apps: [{key, name,
+    previously}]}. `previously` is "removed" when that app took their access away before (the administrator should know),
+    else "none"; it comes from the administrator's own overview of every app, so nothing extra is asked of the apps."""
+    names = get_names()
+    known = {p["email"]: p["access"] for p in overview_people}
+    app_names = {a["key"]: a["name"] for a in member_apps()}
+    grouped: Dict[str, dict] = {}
+    with closing(_connect()) as connection:
+        rows = connection.execute(
+            "SELECT email, app, note, created_at FROM access_requests WHERE status = 'pending' ORDER BY created_at, email, app"
+        ).fetchall()
+    for email, app, note, _created in rows:
+        if app not in app_names:
+            continue  # an app that no longer takes requests
+        first, last = names.get(email, ("", ""))
+        entry = grouped.setdefault(email, {"email": email, "first_name": first, "last_name": last, "note": note, "apps": []})
+        entry["note"] = entry["note"] or note
+        previously = "removed" if known.get(email, {}).get(app) == "removed" else "none"
+        entry["apps"].append({"key": app, "name": app_names[app], "previously": previously})
+    order = list(app_names)  # the apps in their usual order, not alphabetical
+    for entry in grouped.values():
+        entry["apps"].sort(key=lambda a: order.index(a["key"]))
+    return list(grouped.values())
+
+
+def settle_requests(email: str, app_keys: List[str], decline: bool = False) -> None:
+    """A request is finished: the person was let in (the row goes) or turned down (the row stays, marked declined)."""
+    email = email.strip().lower()
+    with closing(_connect()) as connection, connection:
+        for key in app_keys:
+            if decline:
+                connection.execute("UPDATE access_requests SET status = 'declined' WHERE email = ? AND app = ?", (email, key))
+            else:
+                connection.execute("DELETE FROM access_requests WHERE email = ? AND app = ?", (email, key))
+
+
+def requests_for(email: str) -> List[str]:
+    """The apps this person has a PENDING request for."""
+    with closing(_connect()) as connection:
+        return [app for (app,) in connection.execute("SELECT app FROM access_requests WHERE email = ? AND status = 'pending'", (email.strip().lower(),))]
+
+
+def tell_administrators(email: str, app_names: List[str], note: str) -> None:
+    """Tell the administrator (push, ntfy, email: whatever is set up) that someone is waiting. Best effort: never raises."""
+    which = ", ".join(app_names)
+    message = f"{email} asked for access to {which}." + (f' They wrote: "{note}"' if note else "")
+    try:
+        notify.notify("Brassworks: someone asked for access", message, f"{config.DASHBOARD_URL}users.html")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Telling the administrator about a request failed: %s", notify.describe_failure(exc))
 
 
 # --- driving the apps --------------------------------------------------------------------------------------------------
