@@ -105,7 +105,8 @@ class RequestBody(BaseModel):
 
 class Decision(BaseModel):
     email: str
-    approve: List[str]  # the apps to let them into; every other app they were waiting on is turned down
+    approve: List[str] = []  # the apps to let them into
+    decline: List[str] = []  # the apps to turn down for good; any other app they are waiting on stays waiting
 
 
 def _app(key: str) -> dict:
@@ -142,16 +143,23 @@ def get_people(request: Request):
 
 @app.post("/api/requests/decide")
 def decide_request(body: Decision, request: Request, background: BackgroundTasks):
-    """Approve some of what a person asked for (the same as ticking those boxes: one email) and turn down the rest. An app
-    that could not be reached stays waiting, so nothing is lost."""
+    """Act on SOME of what a person asked for: approve those (the same as ticking their boxes: one email) and/or decline those
+    (final: they can't ask again). Whatever isn't named stays waiting for a later decision. An app that could not be reached
+    stays waiting too, so nothing is lost."""
     admin = admin_email(request)
     email = body.email.strip().lower()
     waiting = people.requests_for(email)
     if not waiting:
         raise HTTPException(status_code=404, detail="Nobody is waiting under that address")
     approve = [_app(key) for key in dict.fromkeys(body.approve)]
-    if any(target["key"] not in waiting for target in approve):
+    decline = [_app(key) for key in dict.fromkeys(body.decline)]
+    if not approve and not decline:
+        raise HTTPException(status_code=400, detail="Choose at least one app")
+    named = [t["key"] for t in approve + decline]
+    if any(key not in waiting for key in named):
         raise HTTPException(status_code=400, detail="They didn't ask for that app")
+    if len(set(named)) != len(named):
+        raise HTTPException(status_code=400, detail="An app can't be both approved and declined")
     cookie = session_cookie(request)
     added, failed, let_in = [], [], []
     for target in approve:
@@ -162,10 +170,10 @@ def decide_request(body: Decision, request: Request, background: BackgroundTasks
         except people.AppProblem as exc:
             failed.append(str(exc))  # that one stays waiting
     people.settle_requests(email, let_in)
-    people.settle_requests(email, [key for key in waiting if key not in {t["key"] for t in approve}], decline=True)
+    people.settle_requests(email, [t["key"] for t in decline], decline=True)
     if added:
         background.add_task(people.tell_them, email, admin, added)
-    return {"added": added, "failed": failed}
+    return {"added": added, "failed": failed, "left_waiting": people.requests_for(email)}
 
 
 @app.post("/api/requests")
@@ -268,14 +276,16 @@ def index(request: Request):
         if exc.status_code != 401:
             raise  # 503: sign-in isn't configured on the server
         return templates.TemplateResponse(request, "signed_out.html", base)
-    apps, locked = access.apps_and_locked(request, email)
+    apps, locked, broken = access.apps_and_locked(request, email)
     asked = people.request_states(email)
     for app_ in locked:
         app_["request"] = asked.get(app_["key"], "")  # "", "pending" or "declined"
     is_admin = email in config.ADMIN_EMAILS
     return templates.TemplateResponse(
         request, "index.html",
-        {**base, "email": email, "apps": apps, "locked": locked, "is_admin": is_admin, "waiting": people.waiting_count() if is_admin else 0},
+        {**base, "email": email, "apps": apps, "locked": locked, "broken": broken,
+         "help_link": access.customer_service_link(email, broken) if broken else "",
+         "is_admin": is_admin, "waiting": people.waiting_count() if is_admin else 0},
     )
 
 

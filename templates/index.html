@@ -15,7 +15,7 @@
 
     <section class="section">
       <h2>Your apps</h2>
-      {% if not apps %}
+      {% if not apps and not broken %}
       <p>You don't have access to any apps yet.</p>
       <p class="field-hint">If someone invited you, make sure you signed in with the email address they invited. If that's not the one you used, sign out and sign in again with the right one.</p>
       {% endif %}
@@ -27,7 +27,20 @@
           <span class="app-tile-blurb">{{ app.blurb }}</span>
         </a>
         {% endfor %}
+        {% for app in broken %}
+        <div class="app-tile is-problem" role="alert">
+          <span class="app-tile-icon" data-icon="alert-triangle" aria-hidden="true"></span>
+          <span class="app-tile-name">{{ app.name }}</span>
+          <span class="app-tile-blurb">Couldn't check your access just now.</span>
+        </div>
+        {% endfor %}
       </div>
+      {% if broken %}
+      <p class="problem-note">
+        Something went wrong checking your access to {{ broken | map(attribute="name") | join(", ") }}. Please reload this page in a minute or two.
+        If it still doesn't clear up, {% if help_link %}<a href="{{ help_link }}">email customer service</a>{% else %}let the administrator know{% endif %}.
+      </p>
+      {% endif %}
     </section>
 
     {% if locked %}

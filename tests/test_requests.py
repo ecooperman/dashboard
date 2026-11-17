@@ -52,11 +52,11 @@ def test_apps_that_say_no_account_are_offered_as_locked_tiles_and_the_ones_they_
 
 
 @pytest.mark.parametrize("answer", [401, 302, 404, 500, requests.ConnectionError("down"), requests.Timeout("slow")])
-def test_an_app_that_cannot_say_is_left_off_rather_than_offered(production, key, apps_say, answer):  # noqa: F811
+def test_an_app_that_cannot_say_is_never_offered_as_a_request(production, key, apps_say, answer):  # noqa: F811
     bob(production, key)
     states(apps_say, trips=answer)
     html = production.get("/").text
-    assert "Trips" not in locked_names(html) and "Trips" not in names(html)
+    assert "Trips" not in locked_names(html) and "Trips" not in names(html)  # (a real problem is shown in red instead; see test_home)
     assert locked_names(html) == ["Lists", "Time", "Plans", "Finances"]
 
 
@@ -240,18 +240,45 @@ def test_a_declined_request_is_not_listed(production, key, apps):  # noqa: F811
     assert production.get("/api/people").json()["requests"] == []
 
 
-def test_approving_lets_them_into_what_was_ticked_sends_one_email_and_turns_down_the_rest(production, key, apps, mail):  # noqa: F811
+def test_approving_some_lets_them_in_sends_one_email_and_leaves_the_rest_waiting(production, key, apps, mail):  # noqa: F811
     people.file_requests(BOB, ["lists", "trips", "finances"], "")
     person(production, key, ADMIN)
     resp = production.post("/api/requests/decide", json={"email": "Bob@Example.com", "approve": ["lists", "finances"]})
-    assert resp.status_code == 200 and resp.json() == {"added": ["Lists", "Finances"], "failed": []}
+    assert resp.status_code == 200 and resp.json() == {"added": ["Lists", "Finances"], "failed": [], "left_waiting": ["trips"]}
     assert [u["email"] for u in apps.users["lists"]] == [BOB] and [u["email"] for u in apps.users["finances"]] == [BOB]
     assert apps.users["trips"] == []
     assert all(c["params"] == {"notify": "false"} for c in apps.calls if c["method"] == "POST")
     assert len(mail) == 1 and mail[0][0] == BOB and "Lists and Finances" in mail[0][1]
-    assert people.requests_for(BOB) == []
-    states_now = people.request_states(BOB)
-    assert states_now == {"trips": "declined"}  # approved ones are gone, the left-out one is declined for good
+    assert people.request_states(BOB) == {"trips": "pending"}  # not turned down: it is still on the list for later
+
+
+def test_the_rest_can_be_approved_later_and_only_that_one_is_emailed(production, key, apps, mail):  # noqa: F811
+    people.file_requests(BOB, ["lists", "trips"], "")
+    person(production, key, ADMIN)
+    production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"]})
+    assert production.get("/api/people").json()["requests"][0]["apps"] == [{"key": "trips", "name": "Trips", "previously": "none"}]
+    later = production.post("/api/requests/decide", json={"email": BOB, "approve": ["trips"]}).json()
+    assert later == {"added": ["Trips"], "failed": [], "left_waiting": []}
+    assert len(mail) == 2 and "Trips" in mail[1][1] and "Lists" not in mail[1][1]
+    assert people.request_states(BOB) == {} and production.get("/api/people").json()["requests"] == []
+
+
+def test_the_person_still_sees_what_is_waiting_after_a_partial_approval(production, key, apps, apps_say, mail):  # noqa: F811
+    people.file_requests(BOB, ["lists", "trips"], "")
+    person(production, key, ADMIN)
+    production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"]})
+    states(apps_say, lists=200)
+    html = bob(production, key).get("/").text
+    assert names(html) == ["Lists"] and "Requested. Waiting for an administrator." in html  # Trips is still pending
+    assert "wasn't approved" not in html
+
+
+def test_approve_some_and_decline_others_in_one_go_and_the_third_stays_waiting(production, key, apps, mail):  # noqa: F811
+    people.file_requests(BOB, ["lists", "trips", "finances"], "")
+    person(production, key, ADMIN)
+    got = production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"], "decline": ["trips"]}).json()
+    assert got["added"] == ["Lists"] and got["left_waiting"] == ["finances"]
+    assert people.request_states(BOB) == {"trips": "declined", "finances": "pending"}
 
 
 def test_approving_uses_the_administrators_own_session_like_ticking_a_box(production, key, apps, mail):  # noqa: F811
@@ -262,12 +289,26 @@ def test_approving_uses_the_administrators_own_session_like_ticking_a_box(produc
     assert apps.calls and all(c["headers"] == {"Cookie": cookie} and c["allow_redirects"] is False for c in apps.calls)
 
 
-def test_declining_everything_calls_no_app_and_sends_nothing(production, key, apps, mail):  # noqa: F811
+def test_declining_calls_no_app_sends_nothing_and_is_final_for_just_those_apps(production, key, apps, mail):  # noqa: F811
+    people.file_requests(BOB, ["lists", "trips", "finances"], "")
+    person(production, key, ADMIN)
+    got = production.post("/api/requests/decide", json={"email": BOB, "decline": ["lists", "trips"]}).json()
+    assert got == {"added": [], "failed": [], "left_waiting": ["finances"]}
+    assert apps.calls == [] and mail == []
+    assert people.request_states(BOB) == {"lists": "declined", "trips": "declined", "finances": "pending"}
+
+
+@pytest.mark.parametrize("body", [
+    {"approve": [], "decline": []},                       # nothing chosen
+    {"approve": ["lists"], "decline": ["lists"]},         # both at once
+    {"decline": ["finances"]},                            # an app they never asked for
+    {"approve": ["lists"], "decline": ["flights"]},       # not an app with people
+])
+def test_a_confused_decision_is_refused_and_changes_nothing(production, key, apps, mail, body):  # noqa: F811
     people.file_requests(BOB, ["lists", "trips"], "")
     person(production, key, ADMIN)
-    assert production.post("/api/requests/decide", json={"email": BOB, "approve": []}).json() == {"added": [], "failed": []}
-    assert apps.calls == [] and mail == []
-    assert people.request_states(BOB) == {"lists": "declined", "trips": "declined"}
+    assert production.post("/api/requests/decide", json={"email": BOB, **body}).status_code == 400
+    assert apps.calls == [] and mail == [] and people.request_states(BOB) == {"lists": "pending", "trips": "pending"}
 
 
 def test_an_app_that_is_down_keeps_that_request_waiting_and_the_rest_go_through(production, key, apps, mail):  # noqa: F811
@@ -284,7 +325,7 @@ def test_someone_already_let_in_meanwhile_is_not_added_or_emailed_twice(producti
     apps.put("lists", BOB)
     people.file_requests(BOB, ["lists"], "")
     person(production, key, ADMIN)
-    assert production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"]}).json() == {"added": [], "failed": []}
+    assert production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"]}).json() == {"added": [], "failed": [], "left_waiting": []}
     assert mail == [] and people.requests_for(BOB) == []
     assert [c for c in apps.calls if c["method"] == "POST"] == []
 

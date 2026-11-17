@@ -57,6 +57,24 @@
   font-weight: 600;
 }
 
+.app-tile.is-problem {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.app-tile.is-problem .app-tile-icon,
+.app-tile.is-problem .app-tile-blurb {
+  color: var(--danger);
+}
+
+.problem-note {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-bg);
+}
+
 .app-tile.is-locked {
   background: transparent;
   border-style: dashed;

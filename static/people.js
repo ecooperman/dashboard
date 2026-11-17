@@ -56,20 +56,23 @@ function requestCard(req) {
   });
   const approve = Global.el("button", { type: "button", class: "save-btn", text: "Approve" });
   const decline = Global.el("button", { type: "button", class: "cancel-btn", text: "Decline" });
-  const sync = () => (approve.disabled = !boxes.some((b) => b.box.checked));
+  const sync = () => (approve.disabled = decline.disabled = !boxes.some((b) => b.box.checked));
   boxes.forEach((b) => b.box.addEventListener("change", sync));
 
-  async function decide(approved) {
+  const ticked = () => boxes.filter((b) => b.box.checked).map((b) => b.app.key);
+
+  async function decide(approved, declined) {
     approve.disabled = decline.disabled = true;
     try {
       const done = await Global.fetchJSON("/api/requests/decide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: req.email, approve: approved }),
+        body: JSON.stringify({ email: req.email, approve: approved, decline: declined }),
       });
       const parts = [];
       if (done.added.length) parts.push(`${who || req.email} can now use ${done.added.join(", ")}.`);
-      if (!approved.length) parts.push(`Declined ${who || req.email}.`);
+      if (declined.length) parts.push(`Turned down ${declined.length === 1 ? "one app" : `${declined.length} apps`} for ${who || req.email}.`);
+      if (done.left_waiting.length) parts.push("The rest are still waiting.");
       if (done.failed.length) parts.push(`Problems (left waiting): ${done.failed.join("; ")}.`);
       Global.showMessage(parts.join(" "), done.failed.length ? "error" : "success");
       await load();
@@ -79,9 +82,10 @@ function requestCard(req) {
       sync();
     }
   }
-  approve.addEventListener("click", () => decide(boxes.filter((b) => b.box.checked).map((b) => b.app.key)));
+  approve.addEventListener("click", () => decide(ticked(), []));
   decline.addEventListener("click", () => {
-    if (confirm(`Turn down ${who || req.email}? They won't be able to ask again.`)) decide([]);
+    const names = boxes.filter((b) => b.box.checked).map((b) => b.app.name).join(", ");
+    if (confirm(`Turn down ${who || req.email}'s request for ${names}? They won't be able to ask for ${boxes.filter((b) => b.box.checked).length === 1 ? "it" : "them"} again.`)) decide([], ticked());
   });
 
   const card = Global.el("div", { class: "request-card" }, [

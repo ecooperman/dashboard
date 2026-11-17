@@ -26,8 +26,14 @@ locked tile with a **Request access** button (an app that doesn't answer, or ans
 offered a request for something they may already have). `POST /api/requests` files it under the address in their own verified
 session (never from the request body), after re-asking the app; one request per person per app, a decline is final, at most
 100 wait at once, an optional 300-character note. The administrator is told through the usual `notify` channels (ntfy, Pushover,
-`NOTIFY_EMAIL`) and sees a **Requests** list on the People page: tick which apps to allow, **Approve** (same `grant()` as
-ticking a box, one email) and whatever is left unticked is declined; an app that can't be reached keeps its request waiting.
+`NOTIFY_EMAIL`) and sees a **Requests** list on the People page: tick the apps you mean, then **Approve** (same `grant()` as
+ticking a box, one email) or **Decline** (final) those; anything left unticked stays waiting for a later decision, and so does an app
+that can't be reached.
+
+**When an app has a real problem** (an error answer, a timeout or no answer from its `/api/me`, for example while it restarts during a
+deploy) the home page shows it as a red tile with "Couldn't check your access just now", plus a note to reload in a minute and a
+**customer service** link: a `mailto:` to every address in `ADMIN_EMAILS` with what happened filled in. A 403 is a plain "no account"
+(offered as a request), and a 401 or a redirect (the app doesn't recognise their sign-in) just leaves the app off.
 Still to come: the apps' own Users pages becoming links here.
 
 ## Run it locally

@@ -3,7 +3,7 @@
 covers every subdomain). The sign-in mechanics are tested in shared-python; this checks the wiring."""
 import re
 import time
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import jwt
 import pytest
@@ -82,6 +82,11 @@ def apps_say(monkeypatch):
 def names(html):
     """The apps shown as real, clickable tiles."""
     return [a["name"] for a in config.APPS if re.search(rf'<a class="app-tile"[^>]*>(?:(?!</a>).)*>{a["name"]}</span>', html, re.S)]
+
+
+def problem_names(html):
+    """The apps shown as red problem tiles (the app could not be checked)."""
+    return [a["name"] for a in config.APPS if re.search(rf'app-tile is-problem(?:(?!</div>).)*>{a["name"]}</span>', html, re.S)]
 
 
 def locked_names(html):
@@ -290,9 +295,76 @@ def test_someone_let_into_nothing_is_told_so_and_shown_no_apps(production, key, 
 
 
 @pytest.mark.parametrize("answer", [401, 403, 404, 500, 503, 302, 204, requests.ConnectionError("down"), requests.Timeout("slow")])
-def test_anything_but_a_yes_hides_the_app_so_a_problem_never_shows_one_the_person_cannot_use(production, key, apps_say, answer):
+def test_anything_but_a_yes_never_shows_an_app_as_usable_so_a_problem_never_shows_one_the_person_cannot_use(production, key, apps_say, answer):
     apps_say.status = {"lists": answer, "trips": 200, "time": answer, "plans": answer, "finances": answer}
     assert names(home_as(production, key)) == ["Trips"]
+
+
+# --- an app that has a real problem is shown in red, not quietly left off -----------------------------------------------
+
+
+def help_href(html):
+    found = re.search(r'<a href="(mailto:[^"]*)">email customer service</a>', html)
+    return found.group(1).replace("&amp;", "&").replace("&#34;", '"') if found else None
+
+
+@pytest.mark.parametrize("answer", [404, 500, 502, 503, 204, requests.ConnectionError("down"), requests.Timeout("slow")])
+def test_an_app_with_a_real_problem_is_shown_in_red_and_never_as_usable_or_as_one_to_ask_for(production, key, apps_say, answer):
+    apps_say.status = {"lists": 403, "trips": answer, "time": 403, "plans": 403, "finances": 403}
+    html = home_as(production, key)
+    assert problem_names(html) == ["Trips"] and names(html) == [] and "Trips" not in locked_names(html)
+    assert "Couldn't check your access just now" in html and "reload this page in a minute" in html.lower()
+    assert "You don't have access to any apps yet" not in html  # they may have access: we just could not tell
+    assert html.count("data-request-app=") == 4  # the other four can still be asked for; not the one with the problem
+
+
+@pytest.mark.parametrize("answer", [401, 302, 303, 307])
+def test_an_app_that_does_not_recognise_their_sign_in_is_just_left_off_not_called_a_problem(production, key, apps_say, answer):
+    apps_say.status = {"lists": 403, "trips": answer, "time": 403, "plans": 403, "finances": 403}
+    html = home_as(production, key)
+    assert problem_names(html) == [] and "Trips" not in names(html) + locked_names(html)
+    assert "customer service" not in html and "Something went wrong" not in html
+
+
+def test_a_no_answer_is_still_a_plain_no_and_a_yes_is_still_a_yes(production, key, apps_say):
+    apps_say.status = {"lists": 200, "trips": 403, "time": 500, "plans": 403, "finances": 403}
+    html = home_as(production, key)
+    assert names(html) == ["Lists"] and locked_names(html) == ["Trips", "Plans", "Finances"] and problem_names(html) == ["Time"]
+
+
+def test_the_message_names_every_app_with_a_problem(production, key, apps_say):
+    apps_say.status = {"lists": 500, "trips": requests.Timeout("slow"), "time": 403, "plans": 403, "finances": 403}
+    html = home_as(production, key)
+    assert problem_names(html) == ["Lists", "Trips"] and "checking your access to Lists, Trips." in html
+
+
+def test_customer_service_is_an_email_to_every_administrator_saying_what_happened(production, key, apps_say, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {"zed@example.com", "admin@example.com"})
+    apps_say.status = {"lists": 403, "trips": 500, "time": 403, "plans": 403, "finances": 403}
+    link = help_href(home_as(production, key, "bob@example.com"))
+    assert link.startswith("mailto:admin@example.com,zed@example.com?subject=")
+    decoded = unquote(link)
+    assert "I can't see my apps" in decoded and "access to Trips" in decoded and "bob@example.com" in decoded
+
+
+def test_with_no_administrator_address_the_message_still_helps_but_has_no_link(production, key, apps_say, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", set())
+    apps_say.status = {"lists": 403, "trips": 500, "time": 403, "plans": 403, "finances": 403}
+    html = home_as(production, key, "bob@example.com")
+    assert "let the administrator know" in html and "mailto:" not in html
+
+
+def test_an_administrator_address_cannot_break_out_of_the_link_or_the_page(production, key, apps_say, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {'a"><script>alert(1)</script>@example.com'})
+    apps_say.status = {"lists": 403, "trips": 500, "time": 403, "plans": 403, "finances": 403}
+    html = home_as(production, key, "bob@example.com")
+    assert "<script>alert(1)" not in html and 'a"><' not in html
+
+
+def test_an_administrator_is_never_shown_a_problem_because_nothing_is_asked(production, key, apps_say):
+    apps_say.status = {"lists": 500, "trips": 500, "time": 500, "plans": 500, "finances": 500}
+    html = home_as(production, key, "admin@example.com")
+    assert problem_names(html) == [] and apps_say.calls == []
 
 
 def test_someone_let_into_only_finances_sees_only_finances(production, key, apps_say):
@@ -349,3 +421,12 @@ def test_the_cross_site_guard_is_installed(client):
     resp = client.post("/", headers={"Sec-Fetch-Site": "same-site", "Origin": "https://lists.example.org"})
     assert resp.status_code == 403 and "didn't come from this app" in resp.text
     assert client.post("/", headers={"Sec-Fetch-Site": "same-origin"}).status_code == 405  # reaches the app, which has no POST here
+
+
+def test_an_administrator_address_with_mail_link_punctuation_cannot_add_headers_to_the_email(production, key, apps_say, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {"x?bcc=evil@example.com&cc=evil2@example.com"})
+    apps_say.status = {"lists": 403, "trips": 500, "time": 403, "plans": 403, "finances": 403}
+    link = help_href(home_as(production, key, "bob@example.com"))
+    to, query = link[len("mailto:"):].split("?", 1)
+    assert "?" not in to and "&" not in to and "=" not in to  # the address stays one address
+    assert [part.split("=")[0] for part in query.split("&")] == ["subject", "body"]  # only the headers we set
