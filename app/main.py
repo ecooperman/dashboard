@@ -34,6 +34,7 @@ GIT_SHA = _get_git_sha()
 
 app = FastAPI(title="dashboard")
 csrf.install(app)  # a change must come from this app's own pages, not another app or site (shared_python.csrf)
+auth.warm_up_on_start(app)  # fetch the sign-in keys in the background at start-up, so nobody's first page waits for them
 templates = Jinja2Templates(directory="templates")
 
 
