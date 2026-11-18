@@ -26,7 +26,7 @@ locked tile with a **Request access** button (an app that doesn't answer, or ans
 offered a request for something they may already have). `POST /api/requests` files it under the address in their own verified
 session (never from the request body), after re-asking the app; one request per person per app, a decline is final, at most
 100 wait at once, an optional 300-character note. The administrator is told through the usual `notify` channels (ntfy, Pushover,
-`NOTIFY_EMAIL`) and sees a **Requests** list on the People page: tick the apps you mean, then **Approve** (same `grant()` as
+`NOTIFY_EMAIL`) in ONE digest every `REQUEST_DIGEST_MINUTES` (default 5) covering everything asked since the last one, and sees a **Requests** list on the People page: tick the apps you mean, then **Approve** (same `grant()` as
 ticking a box, one email) or **Decline** (final) those; anything left unticked stays waiting for a later decision, and so does an app
 that can't be reached.
 

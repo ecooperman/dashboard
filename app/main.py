@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import subprocess
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from typing import List, Optional
@@ -36,6 +39,37 @@ app = FastAPI(title="dashboard")
 csrf.install(app)  # a change must come from this app's own pages, not another app or site (shared_python.csrf)
 auth.warm_up_on_start(app)  # fetch the sign-in keys in the background at start-up, so nobody's first page waits for them
 templates = Jinja2Templates(directory="templates")
+
+
+DIGEST_CHECK_SECONDS = 30  # how often to look whether a digest is due (people.send_digest decides; usually it does nothing)
+
+
+async def _send_digests_forever() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(people.send_digest)  # SQLite and SMTP block, so off the event loop
+        except Exception:  # noqa: BLE001 - a bad tick must never stop the next ones
+            logging.getLogger(__name__).exception("Sending the requests digest failed")
+        await asyncio.sleep(DIGEST_CHECK_SECONDS)
+
+
+def send_digests_on_start(application: FastAPI) -> None:
+    """Tell the administrator about new access requests in one periodic digest (see people.send_digest), from start-up to shut-down."""
+    previous = application.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(inner_app):
+        task = asyncio.create_task(_send_digests_forever())
+        try:
+            async with previous(inner_app) as state:
+                yield state
+        finally:
+            task.cancel()
+
+    application.router.lifespan_context = lifespan
+
+
+send_digests_on_start(app)
 
 
 def signed_in_email(request: Request) -> str:
@@ -178,7 +212,7 @@ def decide_request(body: Decision, request: Request, background: BackgroundTasks
 
 
 @app.post("/api/requests")
-def ask_for_access(body: RequestBody, request: Request, background: BackgroundTasks):
+def ask_for_access(body: RequestBody, request: Request):
     """The signed-in person asks for the apps they have no account in. The address is the one they signed in with."""
     email = signed_in_email(request)
     states = access.account_states(request, email)
@@ -194,8 +228,6 @@ def ask_for_access(body: RequestBody, request: Request, background: BackgroundTa
         raise HTTPException(status_code=400, detail=str(exc))
     except OverflowError as exc:
         raise HTTPException(status_code=429, detail=str(exc))
-    if filed:
-        background.add_task(people.tell_administrators, email, [_app(k)["name"] for k in filed], people.clean_note(body.note))
     return {"filed": filed, "already": already}
 
 

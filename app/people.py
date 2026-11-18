@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 NAME_MAX = 60
 NOTE_MAX = 300
+DIGEST_PEOPLE_MAX = 20  # people listed in one digest; the rest are "and N more" (the People page has them all)
 MAX_WAITING = 100  # requests waiting at once: anyone can sign up, so the queue (and the administrator's page) is bounded
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -43,8 +44,14 @@ def _connect() -> sqlite3.Connection:
     )
     connection.execute(
         "CREATE TABLE IF NOT EXISTS access_requests (email TEXT NOT NULL, app TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', "
-        "status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, PRIMARY KEY (email, app))"
+        "status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, announced_at INTEGER, PRIMARY KEY (email, app))"
     )
+    connection.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    if "announced_at" not in {row[1] for row in connection.execute("PRAGMA table_info(access_requests)")}:
+        # A file made before the digest existed: its requests were all announced one by one, so none is announced again.
+        connection.execute("ALTER TABLE access_requests ADD COLUMN announced_at INTEGER")
+        connection.execute("UPDATE access_requests SET announced_at = created_at")
+        connection.commit()
     return connection
 
 
@@ -173,14 +180,53 @@ def requests_for(email: str) -> List[str]:
         return [app for (app,) in connection.execute("SELECT app FROM access_requests WHERE email = ? AND status = 'pending'", (email.strip().lower(),))]
 
 
-def tell_administrators(email: str, app_names: List[str], note: str) -> None:
-    """Tell the administrator (push, ntfy, email: whatever is set up) that someone is waiting. Best effort: never raises."""
-    which = ", ".join(app_names)
-    message = f"{email} asked for access to {which}." + (f' They wrote: "{note}"' if note else "")
+def digest_message(rows: List[tuple], names: Dict[str, Tuple[str, str]], app_names: Dict[str, str]) -> Tuple[str, str]:
+    """(title, body) for one digest. `rows` are (email, app, note) in the order they were filed; one line per person."""
+    grouped: Dict[str, dict] = {}
+    for email, app, note in rows:
+        entry = grouped.setdefault(email, {"apps": [], "note": ""})
+        entry["apps"].append(app_names.get(app, app))
+        entry["note"] = entry["note"] or note
+    order = list(app_names.values())  # the apps in their usual order, not alphabetical
+    for entry in grouped.values():
+        entry["apps"].sort(key=lambda name: order.index(name) if name in order else len(order))
+    lines = []
+    for email, entry in list(grouped.items())[:DIGEST_PEOPLE_MAX]:
+        first, last = names.get(email, ("", ""))
+        who = f"{(first + ' ' + last).strip()} ({email})" if (first or last) else email
+        lines.append(f"{who}: {', '.join(entry['apps'])}" + (f' - "{entry["note"]}"' if entry["note"] else ""))
+    if len(grouped) > DIGEST_PEOPLE_MAX:
+        lines.append(f"...and {len(grouped) - DIGEST_PEOPLE_MAX} more")
+    count = len(grouped)
+    return f"Brassworks: {count} {'person' if count == 1 else 'people'} asked for access", "\n".join(lines)
+
+
+def send_digest(now: Optional[float] = None) -> int:
+    """Tell the administrator about the requests nobody has been told of yet, in ONE message for all of them (so a person asking
+    for five apps, or ten people signing up in a row, is one email, not fifty). Does nothing until `config.REQUEST_DIGEST_MINUTES`
+    have passed since the last time it ran, which is kept in the database, so a restart can neither skip nor repeat a digest.
+    Returns how many people were announced. Best effort: a failed send is logged, never raised (the People page still lists them)."""
+    now = int(time.time() if now is None else now)
+    with closing(_connect()) as connection:
+        connection.execute("BEGIN IMMEDIATE")  # take the requests and mark them in one go, so one filed meanwhile is not lost
+        row = connection.execute("SELECT value FROM meta WHERE key = 'last_digest'").fetchone()
+        if row and now - int(row[0]) < config.REQUEST_DIGEST_MINUTES * 60:
+            connection.rollback()
+            return 0
+        connection.execute("INSERT INTO meta (key, value) VALUES ('last_digest', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(now),))
+        rows = connection.execute(
+            "SELECT email, app, note FROM access_requests WHERE status = 'pending' AND announced_at IS NULL ORDER BY created_at, email, app"
+        ).fetchall()
+        connection.execute("UPDATE access_requests SET announced_at = ? WHERE status = 'pending' AND announced_at IS NULL", (now,))
+        connection.commit()
+    if not rows:
+        return 0
+    title, body = digest_message(rows, get_names(), {a["key"]: a["name"] for a in member_apps()})
     try:
-        notify.notify("Brassworks: someone asked for access", message, f"{config.DASHBOARD_URL}users.html")
+        notify.notify(title, body, f"{config.DASHBOARD_URL}users.html")
     except Exception as exc:  # noqa: BLE001
-        log.warning("Telling the administrator about a request failed: %s", notify.describe_failure(exc))
+        log.warning("Telling the administrator about the requests failed: %s", notify.describe_failure(exc))
+    return len({email for email, _app, _note in rows})
 
 
 # --- driving the apps --------------------------------------------------------------------------------------------------

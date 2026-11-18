@@ -14,6 +14,7 @@ from tests.test_home import ISSUER, CLIENT, apps_say, id_token, key, locked_name
 from tests.test_people import ADMIN, Apps, Reply, apps, mail, person  # noqa: F401 - fixtures
 
 BOB = "bob@example.com"
+NOW = 1_800_000_000  # a fixed clock for the digest, in seconds
 
 
 @pytest.fixture(autouse=True)
@@ -90,16 +91,13 @@ def test_the_administrator_is_told_on_the_home_page_how_many_are_waiting(product
 # --- asking ------------------------------------------------------------------------------------------------------------------
 
 
-def test_asking_files_a_request_under_the_signed_in_address_and_tells_the_administrator_once(production, key, apps_say, pushes):  # noqa: F811
+def test_asking_files_a_request_under_the_signed_in_address_and_sends_nothing_by_itself(production, key, apps_say, pushes):  # noqa: F811
     bob(production, key)
     states(apps_say)
     resp = production.post("/api/requests", json={"apps": ["lists", "trips"], "note": "  I'm Ann's  brother "})
     assert resp.status_code == 200 and resp.json() == {"filed": ["lists", "trips"], "already": []}
     assert people.requests_for(BOB) == ["lists", "trips"]
-    assert len(pushes) == 1
-    title, message, link = pushes[0]
-    assert BOB in message and "Lists, Trips" in message and "I'm Ann's brother" in message
-    assert link.endswith("users.html")
+    assert pushes == []  # the administrator hears in the next digest, not one message per request
 
 
 def test_the_address_comes_from_the_session_never_from_what_was_sent(production, key, apps_say, pushes):  # noqa: F811
@@ -109,15 +107,15 @@ def test_the_address_comes_from_the_session_never_from_what_was_sent(production,
     assert people.requests_for(BOB) == ["lists"] and people.requests_for("ann@example.com") == []
 
 
-def test_asking_again_changes_nothing_and_does_not_tell_the_administrator_again(production, key, apps_say, pushes):  # noqa: F811
+def test_asking_again_changes_nothing_and_is_not_announced_twice(production, key, apps_say, pushes):  # noqa: F811
     bob(production, key)
     states(apps_say)
     production.post("/api/requests", json={"apps": ["lists"], "note": "first"})
     again = production.post("/api/requests", json={"apps": ["lists", "trips"], "note": "second"}).json()
     assert again == {"filed": ["trips"], "already": ["lists"]}
-    assert len(pushes) == 2 and "Trips" in pushes[1][1] and "Lists" not in pushes[1][1]
     assert production.post("/api/requests", json={"apps": ["lists"]}).json() == {"filed": [], "already": ["lists"]}
-    assert len(pushes) == 2
+    assert people.send_digest(NOW) == 1 and len(pushes) == 1
+    assert "Lists, Trips" in pushes[0][1] and "first" in pushes[0][1] and "second" not in pushes[0][1]
 
 
 def test_a_declined_request_cannot_be_filed_again(production, key, apps_say, pushes):  # noqa: F811
@@ -128,7 +126,8 @@ def test_a_declined_request_cannot_be_filed_again(production, key, apps_say, pus
     got = production.post("/api/requests", json={"apps": ["lists"], "note": "please?"}).json()
     assert got == {"filed": [], "already": ["lists"]}
     assert people.requests_for(BOB) == []  # still declined, not waiting again
-    assert len(pushes) == 1
+    people.send_digest(NOW)
+    assert pushes == []  # nothing waiting, nothing to say
 
 
 @pytest.mark.parametrize("answer", [200, 401, 500, requests.ConnectionError("x")])
@@ -184,7 +183,8 @@ def test_the_note_is_plain_text_without_control_characters(production, key, apps
     bob(production, key)
     states(apps_say)
     production.post("/api/requests", json={"apps": ["lists"], "note": "hi\x00\nthere <b>x</b>"})
-    assert pushes[0][1].endswith('They wrote: "hi there <b>x</b>"')  # stored as text; the pages escape it when shown
+    people.send_digest(NOW)
+    assert pushes[0][1].endswith('"hi there <b>x</b>"')  # stored as text; the pages escape it when shown
 
 
 def test_the_queue_has_a_limit_so_it_cannot_be_flooded(monkeypatch, production, key, apps_say, pushes):  # noqa: F811
@@ -374,3 +374,121 @@ def test_the_apps_in_a_request_come_in_the_usual_order_not_alphabetically(produc
     person(production, key, ADMIN)
     got = production.get("/api/people").json()["requests"][0]["apps"]
     assert [a["key"] for a in got] == ["lists", "plans", "finances"]
+
+
+# --- the digest: one message for everything asked since the last one --------------------------------------------------------
+
+
+def file(email, apps, note=""):
+    people.file_requests(email, apps, note)
+
+
+def test_everything_asked_since_the_last_digest_is_one_message(pushes):
+    file("ann@example.com", ["lists", "trips", "time"], "I know Evan")
+    file(BOB, ["lists"])
+    file("cy@example.com", ["finances", "plans"])
+    assert people.send_digest(NOW) == 3
+    assert len(pushes) == 1
+    title, message, link = pushes[0]
+    assert title == "Brassworks: 3 people asked for access"
+    assert message.splitlines() == [
+        'ann@example.com: Lists, Trips, Time - "I know Evan"', f"{BOB}: Lists", "cy@example.com: Plans, Finances"]
+    assert link.endswith("users.html")
+
+
+def test_one_person_is_worded_in_the_singular_and_names_are_shown(pushes):
+    people.set_name("ann@example.com", "Ann", "Lee")
+    file("ann@example.com", ["lists"])
+    people.send_digest(NOW)
+    assert pushes[0][0] == "Brassworks: 1 person asked for access"
+    assert pushes[0][1] == "Ann Lee (ann@example.com): Lists"
+
+
+def test_nothing_new_means_no_message(pushes):
+    assert people.send_digest(NOW) == 0
+    assert pushes == []
+
+
+def test_a_request_is_announced_once_and_a_later_one_goes_in_the_next_digest(pushes):
+    file("ann@example.com", ["lists"])
+    people.send_digest(NOW)
+    file(BOB, ["trips"])
+    assert people.send_digest(NOW + 60) == 0  # too soon: waits for the interval
+    assert len(pushes) == 1
+    assert people.send_digest(NOW + config.REQUEST_DIGEST_MINUTES * 60) == 1
+    assert len(pushes) == 2 and BOB in pushes[1][1] and "ann@example.com" not in pushes[1][1]
+    assert people.send_digest(NOW + 10_000) == 0 and len(pushes) == 2  # both are announced now
+
+
+def test_the_interval_is_remembered_in_the_database_so_a_restart_cannot_send_early(pushes):
+    file("ann@example.com", ["lists"])
+    people.send_digest(NOW)
+    file(BOB, ["lists"])
+    # a restart is a fresh process: nothing in memory, only the file
+    assert people.send_digest(NOW + 30) == 0 and pushes and len(pushes) == 1
+    assert people.waiting_count() == 2  # and the People page counts both regardless
+
+
+def test_one_decided_before_the_digest_is_left_out(pushes):
+    file("ann@example.com", ["lists", "trips"])
+    people.settle_requests("ann@example.com", ["lists"])  # approved
+    file(BOB, ["lists"])
+    people.settle_requests(BOB, ["lists"], decline=True)
+    assert people.send_digest(NOW) == 1
+    assert pushes[0][1] == "ann@example.com: Trips"
+
+
+def test_a_long_queue_is_cut_to_twenty_people_and_says_how_many_more(pushes):
+    for number in range(25):
+        file(f"p{number:02d}@example.com", ["lists"])
+    assert people.send_digest(NOW) == 25
+    lines = pushes[0][1].splitlines()
+    assert pushes[0][0] == "Brassworks: 25 people asked for access"
+    assert len(lines) == 21 and lines[-1] == "...and 5 more"
+
+
+def test_requests_that_were_already_announced_one_by_one_are_not_announced_again(pushes, tmp_path):
+    """A people.db made before the digest existed (no announced_at column): its requests were already told of."""
+    import sqlite3
+
+    connection = sqlite3.connect(config.PEOPLE_DB)
+    connection.execute(
+        "CREATE TABLE access_requests (email TEXT NOT NULL, app TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', "
+        "status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, PRIMARY KEY (email, app))")
+    connection.execute("INSERT INTO access_requests VALUES ('old@example.com', 'lists', '', 'pending', 100)")
+    connection.commit()
+    connection.close()
+    assert people.send_digest(NOW) == 0 and pushes == []
+    assert people.waiting_count() == 1  # still waiting for a decision, just not announced again
+    file(BOB, ["lists"])
+    assert people.send_digest(NOW + 10_000) == 1 and BOB in pushes[0][1] and "old@example.com" not in pushes[0][1]
+
+
+def test_a_failing_channel_does_not_break_the_digest(monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(notify, "notify", boom)
+    file("ann@example.com", ["lists"])
+    assert people.send_digest(NOW) == 1  # logged, not raised; the People page still lists them
+    assert people.waiting_count() == 1
+
+
+def test_a_note_cannot_break_out_of_its_line(pushes):
+    file("ann@example.com", ["lists"], "line one\nline two <script>")
+    people.send_digest(NOW)
+    assert len(pushes[0][1].splitlines()) == 1  # the note is cleaned to one line when filed
+
+
+def test_the_digest_runs_from_start_up_and_stops_at_shut_down(monkeypatch, pushes):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    monkeypatch.setattr("app.main.DIGEST_CHECK_SECONDS", 0.05)
+    file("ann@example.com", ["lists"])
+    with TestClient(app):
+        deadline = time.time() + 3
+        while not pushes and time.time() < deadline:
+            time.sleep(0.05)
+    assert len(pushes) == 1

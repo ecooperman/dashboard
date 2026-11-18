@@ -51,6 +51,9 @@ APP_API_BASE = {
     "finances": os.environ.get("FINANCES_API_BASE", "http://127.0.0.1:8080"),
     "resume": os.environ.get("RESUME_API_BASE", "http://127.0.0.1:8041"),  # the resume ADMIN app (8041), not the public site
 }
+# How often (at most) the administrator is told about new requests for access: one message for everything asked since the last
+# one, instead of one per request. The People page and the home page's count are always up to date regardless.
+REQUEST_DIGEST_MINUTES = max(1, int(os.environ.get("REQUEST_DIGEST_MINUTES", "5")))
 APP_CHECK_TIMEOUT = 2  # seconds; an app that does not answer in time is left off the page
 
 
