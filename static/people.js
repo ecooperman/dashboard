@@ -189,6 +189,14 @@ function buildAddForm() {
   const email = Global.el("input", { type: "email", placeholder: "Email address", "aria-label": "Email address of the person to add", ...attrs });
   const first = Global.el("input", { type: "text", placeholder: "First name", maxlength: "60", "aria-label": "First name", ...attrs });
   const last = Global.el("input", { type: "text", placeholder: "Last name", maxlength: "60", "aria-label": "Last name", ...attrs });
+  // Suggest people already on the page (so one known to Lists can be let into more apps without retyping), filling their name too.
+  Global.suggest(email, {
+    items: () => data.people.map((p) => Global.personSuggestion({ email: p.email, name: displayName(p) })),
+    onPick: (item) => {
+      const person = data.people.find((p) => p.email === item.value);
+      if (person && !first.value && !last.value) [first.value, last.value] = [person.first_name, person.last_name];
+    },
+  });
   // Most people get everything, so every app starts ticked.
   const boxes = data.apps.map((a) => {
     const box = Global.el("input", { type: "checkbox" });
