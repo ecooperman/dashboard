@@ -113,7 +113,7 @@ def test_a_signed_out_visitor_gets_a_sign_in_button_and_no_apps(production):
 def test_an_ordinary_signed_in_person_sees_the_apps_that_say_they_have_an_account(production, key, apps_say):
     production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
     html = production.get("/").text
-    assert names(html) == ["Lists", "Trips", "Time", "Plans", "Finances", "Resume"]
+    assert names(html) == ["Lists", "Trips", "Time", "Plans", "Finances", "Jobs"]
     assert "https://lists.evancooperman.com/" in html and "https://finances.evancooperman.com/" in html and "localhost" not in html
 
 
@@ -329,7 +329,7 @@ def test_an_app_that_does_not_recognise_their_sign_in_is_just_left_off_not_calle
 def test_a_no_answer_is_still_a_plain_no_and_a_yes_is_still_a_yes(production, key, apps_say):
     apps_say.status = {"lists": 200, "trips": 403, "time": 500, "plans": 403, "finances": 403}
     html = home_as(production, key)
-    assert names(html) == ["Lists"] and locked_names(html) == ["Trips", "Plans", "Finances", "Resume"] and problem_names(html) == ["Time"]
+    assert names(html) == ["Lists"] and locked_names(html) == ["Trips", "Plans", "Finances", "Jobs"] and problem_names(html) == ["Time"]
 
 
 def test_the_message_names_every_app_with_a_problem(production, key, apps_say):

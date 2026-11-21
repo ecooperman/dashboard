@@ -47,7 +47,7 @@ def test_apps_that_say_no_account_are_offered_as_locked_tiles_and_the_ones_they_
     states(apps_say, lists=200)
     html = production.get("/").text
     assert names(html) == ["Lists"]
-    assert locked_names(html) == ["Trips", "Time", "Plans", "Finances", "Resume"]
+    assert locked_names(html) == ["Trips", "Time", "Plans", "Finances", "Jobs"]
     assert "Flights" not in html  # a private app is never even mentioned to someone who can't have it
     assert html.count("data-request-app=") == 5
 
@@ -58,7 +58,7 @@ def test_an_app_that_cannot_say_is_never_offered_as_a_request(production, key, a
     states(apps_say, trips=answer)
     html = production.get("/").text
     assert "Trips" not in locked_names(html) and "Trips" not in names(html)  # (a real problem is shown in red instead; see test_home)
-    assert locked_names(html) == ["Lists", "Time", "Plans", "Finances", "Resume"]
+    assert locked_names(html) == ["Lists", "Time", "Plans", "Finances", "Jobs"]
 
 
 def test_the_administrator_is_never_offered_a_request(production, key, apps_say):  # noqa: F811
