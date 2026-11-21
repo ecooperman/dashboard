@@ -133,11 +133,13 @@ def test_the_page_is_for_administrators_and_everyone_else_goes_home(production, 
     assert page.status_code == 200 and "Add someone" in page.text
 
 
-def test_the_home_page_links_to_it_only_for_administrators(production, key, apps_say):  # noqa: F811
+def test_the_menu_offers_people_and_usage_only_to_administrators(production, key, apps_say):  # noqa: F811
+    nav = open("static/nav.js").read()
+    assert 'if (me.is_admin)' in nav and '"/users.html"' in nav and '"/stats.html"' in nav  # the links sit inside the administrator-only branch
     person(production, key, "bob@example.com")
-    assert "/users.html" not in production.get("/").text
+    assert production.get("/api/me").json()["is_admin"] is False and production.get("/users.html").status_code == 302
     person(production, key, ADMIN)
-    assert "/users.html" in production.get("/").text
+    assert production.get("/api/me").json()["is_admin"] is True and production.get("/users.html").status_code == 200
 
 
 # --- the grid ----------------------------------------------------------------------------------------------------------

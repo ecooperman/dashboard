@@ -177,3 +177,23 @@ def test_a_person_whose_app_did_not_answer_is_not_said_to_have_no_account(admin,
 def test_the_person_route_wants_an_address(admin, apps):
     assert admin.get("/api/stats/person", params={"email": "nonsense"}).status_code == 400
     assert apps.calls == []
+
+
+# --- the menu and the profile page ----------------------------------------------------------------------------------------------
+
+
+def test_every_signed_in_page_has_the_menu_and_the_admin_pages_no_longer_carry_ad_hoc_links(admin):
+    for path in ("/", "/profile.html", "/users.html", "/stats.html", "/person.html"):
+        page = admin.get(path)
+        assert page.status_code == 200 and 'id="app-nav-mount"' in page.text and "/nav.js" in page.text, path
+        assert "Back to your apps" not in page.text and "Back to People" not in page.text, path
+
+
+def test_your_name_is_on_the_profile_page_not_the_home_page(admin):
+    assert 'id="profile-name"' in admin.get("/profile.html").text
+    assert 'id="profile-name"' not in admin.get("/").text and "Manage who can use what" not in admin.get("/").text
+
+
+def test_the_profile_page_sends_a_signed_out_visitor_to_the_front_page(production):
+    resp = production.get("/profile.html")
+    assert resp.status_code == 302 and resp.headers["location"] == "/"

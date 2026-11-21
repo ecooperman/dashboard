@@ -10,8 +10,11 @@
     <p class="subtitle">Signed in as {{ email }}</p>
   </header>
 
+  <div id="app-nav-mount"></div>
+
   <main>
     <div id="page-message" class="page-message hidden"></div>
+    {% if waiting %}<p class="field-hint" id="waiting-note"><a href="/users.html">{{ waiting }} request{{ "" if waiting == 1 else "s" }} waiting for you.</a></p>{% endif %}
 
     <section class="section">
       <h2>Your apps</h2>
@@ -69,22 +72,11 @@
     </section>
     {% endif %}
 
-    <section class="section">
-      <h2>Your name</h2>
-      <p class="field-hint">So the people who let you in can tell who you are. It is never needed to sign in.</p>
-      <div id="profile-name" class="people-name-form"></div>
-    </section>
-    {% if is_admin %}
-    <section class="section">
-      <h2>People</h2>
-      <p><a class="secondary-btn" data-btn-icon="users" href="/users.html">Manage who can use what</a> <a class="secondary-btn" data-btn-icon="eye" href="/stats.html">See how the apps are used</a></p>
-      {% if waiting %}<p class="field-hint" id="waiting-note">{{ waiting }} request{{ "" if waiting == 1 else "s" }} waiting for you.</p>{% endif %}
-    </section>
-    {% endif %}
   </main>
 
   <script src="{{ shared_assets_base }}/theme.js"></script>
   <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/nav.js"></script>
   <script src="/home.js"></script>
 </body>
 </html>

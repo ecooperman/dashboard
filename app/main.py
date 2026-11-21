@@ -89,11 +89,11 @@ def get_version():
 def me(request: Request):
     """Who is signed in, for the shared page header (Global.mountUserBadge)."""
     email = signed_in_email(request)
-    return {
-        "email": email,
-        "is_admin": email in config.ADMIN_EMAILS,
-        "logout_url": oidc_login.logout_url(request),
-    }
+    is_admin = email in config.ADMIN_EMAILS
+    out = {"email": email, "is_admin": is_admin, "logout_url": oidc_login.logout_url(request)}
+    if is_admin:
+        out["waiting_requests"] = people.waiting_count()  # for the menu's badge on People
+    return out
 
 
 # --- the central Users page and people's names ---------------------------------------------------------------------------
@@ -202,6 +202,16 @@ def get_person_stats(email: str, request: Request):
     if "@" not in email:
         raise HTTPException(status_code=400, detail="That doesn't look like an email address")
     return stats.person(email, session_cookie(request))
+
+
+@app.get("/profile.html", response_class=HTMLResponse)
+def profile_page(request: Request):
+    """Your own name. Signed-out visitors go to the front page, where they can sign in."""
+    try:
+        email = signed_in_email(request)
+    except HTTPException:
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse(request, "profile.html", {"shared_assets_base": config.SHARED_ASSETS_BASE, "email": email})
 
 
 @app.get("/api/people")

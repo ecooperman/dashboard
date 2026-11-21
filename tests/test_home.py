@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from shared_python import auth, settings
 
-from app import config
+from app import config, people
 from app.main import app
 
 ISSUER = "https://login.example.com"
@@ -156,7 +156,15 @@ def test_me_is_a_401_when_signed_out(production):
 
 def test_me_says_who_and_where_log_out_goes(production, key):
     production.cookies.set("oidc_session", id_token(key, "admin@example.com"))
-    assert production.get("/api/me").json() == {"email": "admin@example.com", "is_admin": True, "logout_url": "/auth/logout"}
+    assert production.get("/api/me").json() == {"email": "admin@example.com", "is_admin": True, "logout_url": "/auth/logout", "waiting_requests": 0}
+
+
+def test_me_tells_only_an_administrator_how_many_requests_are_waiting(production, key):
+    people.file_requests("ann@example.com", ["lists", "trips"], None)
+    production.cookies.set("oidc_session", id_token(key, "bob@example.com"))
+    assert "waiting_requests" not in production.get("/api/me").json()
+    production.cookies.set("oidc_session", id_token(key, "admin@example.com"))
+    assert production.get("/api/me").json()["waiting_requests"] == 2
 
 
 # --- it really is the front door -------------------------------------------------------------

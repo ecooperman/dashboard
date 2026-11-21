@@ -21,6 +21,10 @@ their first and last name; ticking or unticking drives each app's own administra
 cookie, fixed localhost addresses, no redirects followed, no extra secret), so each app stays the source of truth and checks for
 itself. A person is emailed once for everything. Everyone can set their own name on the home page.
 
+**Menu:** every signed-in page has the shared sidebar (bottom bar on a phone), built in `static/nav.js`. The apps stay as tiles on the home page; the menu holds
+everything else: **Apps**, **Your profile** (`/profile.html`, your own name), and for an administrator an **Admin** group with **People** (a badge counts the
+requests waiting, from `/api/me`) and **Usage**. The server still refuses the admin pages to anyone else; hiding the links is only tidiness. A new page goes in `nav.js`.
+
 **Requests for access:** an app that answers 403 ("no account") to a signed-in person's `/api/me` shows on their home page as a
 locked tile with a **Request access** button (an app that doesn't answer, or answers anything else, is left off, so nobody is
 offered a request for something they may already have). `POST /api/requests` files it under the address in their own verified
