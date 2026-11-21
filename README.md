@@ -15,14 +15,14 @@ with accounts (lists, trips) the dashboard asks the app itself, on this machine,
 that says anything but yes, or doesn't answer, is left off. Private apps with no accounts (time, plans, finances,
 flights) are shown to administrators only. Someone let into nothing is told so.
 
-**Stage 2 (partly built):** the landing page shows only what each person can actually reach (above). The **People** page
+**Stage 2 (partly built):** the landing page shows only what each person can actually reach (above). The **Users** page
 (`/users.html`, administrators only, `app/people.py`) is the one place to add someone and tick which apps they may use, with
 their first and last name; ticking or unticking drives each app's own administrator Users routes AS the signed-in administrator (their own
 cookie, fixed localhost addresses, no redirects followed, no extra secret), so each app stays the source of truth and checks for
 itself. A person is emailed once for everything. Everyone can set their own name on the home page.
 
 **Menu:** every signed-in page has the shared sidebar (bottom bar on a phone), built in `static/nav.js`. The apps stay as tiles on the home page; the menu holds
-everything else: **Apps**, **Your profile** (`/profile.html`, your own name), and for an administrator an **Admin** group with **People** (a badge counts the
+everything else: **Apps**, **Your profile** (`/profile.html`, your own name), and for an administrator an **Admin** group with **Users** (a badge counts the
 requests waiting, from `/api/me`) and **Usage**. The server still refuses the admin pages to anyone else; hiding the links is only tidiness. A new page goes in `nav.js`.
 
 **Requests for access:** an app that answers 403 ("no account") to a signed-in person's `/api/me` shows on their home page as a
@@ -30,7 +30,7 @@ locked tile with a **Request access** button (an app that doesn't answer, or ans
 offered a request for something they may already have). `POST /api/requests` files it under the address in their own verified
 session (never from the request body), after re-asking the app; one request per person per app, a decline is final, at most
 100 wait at once, an optional 300-character note. The administrator is told through the usual `notify` channels (ntfy, Pushover,
-`NOTIFY_EMAIL`) in ONE digest every `REQUEST_DIGEST_MINUTES` (default 5) covering everything asked since the last one, and sees a **Requests** list on the People page: tick the apps you mean, then **Approve** (same `grant()` as
+`NOTIFY_EMAIL`) in ONE digest every `REQUEST_DIGEST_MINUTES` (default 5) covering everything asked since the last one, and sees a **Requests** list on the Users page: tick the apps you mean, then **Approve** (same `grant()` as
 ticking a box, one email) or **Decline** (final) those; anything left unticked stays waiting for a later decision, and so does an app
 that can't be reached.
 

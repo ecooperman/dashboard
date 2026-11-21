@@ -28,7 +28,7 @@ function appCard(app) {
 
 async function load() {
   if (!email) {
-    overallEl.replaceChildren(Global.el("p", { class: "field-hint is-error", text: "No person was chosen. Pick someone on the People page." }));
+    overallEl.replaceChildren(Global.el("p", { class: "field-hint is-error", text: "No person was chosen. Pick someone on the Users page." }));
     return;
   }
   let data;

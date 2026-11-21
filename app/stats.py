@@ -3,7 +3,7 @@
 Each app answers its own administrator-only `GET /api/admin/stats` (shared_python.usage): for every account, when they were last
 there, on how many days, and counts of what they keep (numbers and dates, never any content). This module asks every app in
 parallel AS THE SIGNED-IN ADMINISTRATOR (their own session cookie, fixed localhost addresses, no redirects followed: the same way the
-People page drives the apps) and puts the answers together two ways: `overview` (every app side by side, and across apps) and
+Users page drives the apps) and puts the answers together two ways: `overview` (every app side by side, and across apps) and
 `person` (one person across every app). An app that is down, or has not been updated to report yet, is named and left out of the
 sums, never guessed.
 

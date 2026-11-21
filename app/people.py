@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 NAME_MAX = 60
 NOTE_MAX = 300
-DIGEST_PEOPLE_MAX = 20  # people listed in one digest; the rest are "and N more" (the People page has them all)
+DIGEST_PEOPLE_MAX = 20  # people listed in one digest; the rest are "and N more" (the Users page has them all)
 MAX_WAITING = 100  # requests waiting at once: anyone can sign up, so the queue (and the administrator's page) is bounded
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -205,7 +205,7 @@ def send_digest(now: Optional[float] = None) -> int:
     """Tell the administrator about the requests nobody has been told of yet, in ONE message for all of them (so a person asking
     for five apps, or ten people signing up in a row, is one email, not fifty). Does nothing until `config.REQUEST_DIGEST_MINUTES`
     have passed since the last time it ran, which is kept in the database, so a restart can neither skip nor repeat a digest.
-    Returns how many people were announced. Best effort: a failed send is logged, never raised (the People page still lists them)."""
+    Returns how many people were announced. Best effort: a failed send is logged, never raised (the Users page still lists them)."""
     now = int(time.time() if now is None else now)
     with closing(_connect()) as connection:
         connection.execute("BEGIN IMMEDIATE")  # take the requests and mark them in one go, so one filed meanwhile is not lost

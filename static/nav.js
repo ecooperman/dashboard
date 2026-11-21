@@ -1,5 +1,5 @@
 // The menu on every dashboard page (Global.buildNav, shared-assets/theme.js): a sidebar on a wide screen, the bottom bar on a phone.
-// The apps themselves stay as tiles on the home page. Everything else lives here: your profile, and for an administrator People
+// The apps themselves stay as tiles on the home page. Everything else lives here: your profile, and for an administrator Users
 // (with a count of requests waiting) and Usage. The server enforces who may open the admin pages too (they send anyone else home), so
 // hiding the links is only tidiness.
 const path = window.location.pathname;
@@ -17,7 +17,7 @@ const path = window.location.pathname;
   ];
   if (me.is_admin) {
     items.push({
-      href: "/users.html", icon: "users", label: "People", group: "Admin", active: path === "/users.html" || path === "/person.html",
+      href: "/users.html", icon: "users", label: "Users", group: "Admin", active: path === "/users.html" || path === "/person.html",
       badge: { id: "nav-waiting-count", count: me.waiting_requests || 0 }, // requests for access waiting for a decision
     });
     items.push({ href: "/stats.html", icon: "chart", label: "Usage", group: "Admin", active: path === "/stats.html" });

@@ -1,5 +1,5 @@
 """Asking for access: a signed-in person with no account in an app can ask for it, an administrator approves or declines
-on the People page. The safety rules checked here: the address is always the one in the person's own verified session,
+on the Users page. The safety rules checked here: the address is always the one in the person's own verified session,
 nothing opens without an administrator, only an app that plainly says "no account" can be asked for, a decline is final
 (they can't ask again), and the queue can't be flooded."""
 import time
@@ -426,7 +426,7 @@ def test_the_interval_is_remembered_in_the_database_so_a_restart_cannot_send_ear
     file(BOB, ["lists"])
     # a restart is a fresh process: nothing in memory, only the file
     assert people.send_digest(NOW + 30) == 0 and pushes and len(pushes) == 1
-    assert people.waiting_count() == 2  # and the People page counts both regardless
+    assert people.waiting_count() == 2  # and the Users page counts both regardless
 
 
 def test_one_decided_before_the_digest_is_left_out(pushes):
@@ -470,7 +470,7 @@ def test_a_failing_channel_does_not_break_the_digest(monkeypatch):
 
     monkeypatch.setattr(notify, "notify", boom)
     file("ann@example.com", ["lists"])
-    assert people.send_digest(NOW) == 1  # logged, not raised; the People page still lists them
+    assert people.send_digest(NOW) == 1  # logged, not raised; the Users page still lists them
     assert people.waiting_count() == 1
 
 
