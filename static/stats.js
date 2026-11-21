@@ -3,6 +3,7 @@ Global.mountUserBadge();
 
 const overallEl = document.getElementById("overall");
 const appsEl = document.getElementById("apps");
+const trendEl = document.getElementById("trend");
 const adminsBox = document.getElementById("include-admins");
 
 function overallCards(data) {
@@ -43,6 +44,7 @@ async function load() {
   } catch (err) {
     overallEl.replaceChildren(Global.el("p", { class: "field-hint is-error", text: err.message }));
     appsEl.replaceChildren();
+    trendEl.replaceChildren();
     return;
   }
   const notes = data.not_reporting.length
@@ -50,6 +52,7 @@ async function load() {
     : [];
   overallEl.replaceChildren(overallCards(data), ...notes);
   appsEl.replaceChildren(...data.apps.map(appCard));
+  trendEl.replaceChildren(...Trend.section(data.trend));
 }
 
 adminsBox.addEventListener("change", load);

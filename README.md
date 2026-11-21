@@ -89,3 +89,11 @@ See DEPLOYMENT.md ("Adding a new app" and "Signing in with Auth0"). Specific to 
 hostname must **bypass Cloudflare Access** (a Bypass policy for just `dashboard.evancooperman.com`),
 or people hit Cloudflare's login before they can reach the sign-in; and it needs the same cache-bypass rule
 as the other hostnames.
+
+## The daily usage chart
+
+The Usage page draws how many people used the apps on each of the last 30 days. Each app tells the dashboard the first time it sees a
+person on a new UTC day (`POST /internal/active-day`, from `shared_python.usage`; refused for anything that came through the internet);
+the dashboard keeps only, per day and app, how many other people and how many administrators were there (`daily_active` in `people.db`,
+`app/trend.py`), never an address. History starts when each app is next deployed. A report lost while the dashboard is down is a missing
+person-day, not recovered. The administrators checkbox applies to the chart too.

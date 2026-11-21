@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 from shared_python import probe
 
-from . import config, people
+from . import config, people, trend
 
 log = logging.getLogger(__name__)
 
@@ -130,6 +130,7 @@ def overview(cookie: Tuple[str, str], include_admins: bool = False, now: Optiona
             "active_30d": sum(1 for p in everyone if p["last"] and now - p["last"] <= timedelta(days=30)),
             "never_used": sum(1 for p in everyone if p["last"] is None),
         },
+        "trend": trend.series(include_admins=include_admins, today=now.date()),
         "waiting_requests": people.waiting_count(),
         "reporting": sum(1 for a in answers if a["state"] == "ok"),
         "not_reporting": [{"name": a["name"], "why": a["why"]} for a in answers if a["state"] != "ok"],

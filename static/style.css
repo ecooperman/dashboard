@@ -257,3 +257,103 @@
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
+
+/* --- the Usage page's daily chart (trend.js) --- */
+
+.trend {
+  position: relative;
+  margin: 10px 0;
+}
+
+.trend-plot svg {
+  display: block;
+  max-width: 100%;
+}
+
+.trend-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.trend-axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.trend-bar {
+  fill: var(--accent);
+}
+
+.trend-day {
+  outline: none;
+}
+
+.trend-hit {
+  fill: transparent;
+}
+
+.trend-day:hover .trend-bar,
+.trend-day:focus .trend-bar {
+  opacity: 0.8;
+}
+
+.trend-day:focus-visible .trend-hit {
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+
+.trend-tip {
+  position: absolute;
+  z-index: 2;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.trend-tip-value {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.trend-tip-day {
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.trend-tip-row {
+  color: var(--muted);
+}
+
+.trend-table summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.trend-table-scroll {
+  overflow-x: auto;
+}
+
+.trend-grid-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.trend-grid-table th,
+.trend-grid-table td {
+  padding: 4px 12px 4px 0;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.trend-grid-table th {
+  font-weight: 600;
+  color: var(--muted);
+}

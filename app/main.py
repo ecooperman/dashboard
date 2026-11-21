@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from shared_python import auth, csrf, oidc_login
 
-from . import access, config, people, stats
+from . import access, config, people, stats, trend
 
 # The front door for every app: /auth/login, /auth/callback and /auth/logout (shared_python.oidc_login)
 # sign people in through the identity provider and set the session cookie for the whole parent
@@ -140,6 +140,27 @@ def access_changed(body: AccessChanged, request: Request):
     if any(header in request.headers for header in ("cf-connecting-ip", "cf-ray", "x-forwarded-for")):
         raise HTTPException(status_code=404, detail="Not Found")
     access.forget_apps(body.email)
+
+
+class ActiveDay(BaseModel):
+    app: str
+    email: str
+    day: str
+
+
+@app.post("/internal/active-day", status_code=204)
+def active_day(body: ActiveDay, request: Request):
+    """An app tells us someone used it today (shared_python.usage), once per person per day, for the Usage page's daily chart (app/trend.py).
+    Only for the apps on this machine: anything that came through the internet (Cloudflare marks every such request) is refused as if
+    the route did not exist."""
+    if any(header in request.headers for header in ("cf-connecting-ip", "cf-ray", "x-forwarded-for")):
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not any(a["key"] == body.app and a["access"] == "member" for a in config.APPS):
+        raise HTTPException(status_code=400, detail="That isn't an app")
+    try:
+        trend.record(body.app, body.email, body.day)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # --- the central Users page and people's names ---------------------------------------------------------------------------
