@@ -20,7 +20,7 @@ const path = window.location.pathname;
       href: "/users.html", icon: "users", label: "People", group: "Admin", active: path === "/users.html" || path === "/person.html",
       badge: { id: "nav-waiting-count", count: me.waiting_requests || 0 }, // requests for access waiting for a decision
     });
-    items.push({ href: "/stats.html", icon: "eye", label: "Usage", group: "Admin", active: path === "/stats.html" });
+    items.push({ href: "/stats.html", icon: "chart", label: "Usage", group: "Admin", active: path === "/stats.html" });
   }
   items.push({ icon: "refresh", label: "Refresh", onclick: () => location.reload() });
   Global.buildNav(items);
