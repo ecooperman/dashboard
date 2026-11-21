@@ -100,7 +100,7 @@ def me(request: Request):
 async def apps_for_nav(request: Request):
     """The apps this person may open, for the sidebar every app shows (shared-assets theme.js). Read from the apps' own pages, so it
     answers cross-origin for the addresses in config.nav_origins() only (with credentials: the cookie is the sign-in). Remembered for a
-    few minutes per person (app/access.py) and forgotten when an administrator changes their access, so opening pages does not ask every app every time."""
+    day per person (app/access.py) and forgotten when an administrator changes their access, so opening pages does not ask every app every time."""
     headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
     origin = request.headers.get("origin", "")
     if origin in config.nav_origins():
@@ -112,6 +112,20 @@ async def apps_for_nav(request: Request):
         return JSONResponse({"detail": "Not signed in"}, status_code=401, headers=headers)  # with the headers, so the page can read the 401
     apps = await asyncio.to_thread(access.nav_apps, request, email)  # asking the apps blocks, so off the event loop
     return JSONResponse({"apps": apps}, headers=headers)
+
+
+class MenuRefresh(BaseModel):
+    email: Optional[str] = None
+
+
+@app.post("/api/apps/forget")
+def forget_menu_apps(body: MenuRefresh, request: Request):
+    """By hand, administrators only: drop the remembered list of apps behind every menu (or one person's, with an email), so the next page
+    anyone opens asks the apps afresh. For when the list looks wrong, e.g. after a change the apps could not announce."""
+    admin_email(request)
+    before = access.remembered_count()
+    access.forget_apps(body.email.strip().lower() if body.email else None)
+    return {"cleared": before - access.remembered_count()}
 
 
 class AccessChanged(BaseModel):

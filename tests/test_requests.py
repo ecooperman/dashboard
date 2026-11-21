@@ -543,3 +543,21 @@ def test_that_route_refuses_anything_that_came_through_the_internet(client):
         resp = client.post("/internal/access-changed", json={"email": BOB}, headers={header: "203.0.113.5"})
         assert resp.status_code == 404
     assert BOB in cache  # untouched
+
+
+def test_the_administrator_can_clear_everyones_remembered_apps_by_hand(production, key):  # noqa: F811
+    cache = _remembered(BOB)
+    cache["someone.else@example.com"] = (time.time(), [])
+    person(production, key, ADMIN)
+    assert production.post("/api/apps/forget", json={"email": "Bob@Example.com"}).json() == {"cleared": 1}  # one person's
+    assert BOB not in cache and "someone.else@example.com" in cache
+    assert production.post("/api/apps/forget", json={}).json() == {"cleared": 1}  # everyone's
+    assert cache == {}
+
+
+def test_clearing_the_remembered_apps_is_for_administrators_only(production, key):  # noqa: F811
+    cache = _remembered(BOB)
+    assert production.post("/api/apps/forget", json={}).status_code in (401, 403)  # signed out
+    person(production, key, BOB)
+    assert production.post("/api/apps/forget", json={}).status_code == 403  # an ordinary person
+    assert BOB in cache

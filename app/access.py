@@ -99,11 +99,15 @@ def apps_for(request: Request, email: str) -> List[dict]:
 
 # --- the apps list for every app's navigation ---------------------------------------------------------------------------------------
 # Every app's sidebar ends with the apps this person may open (shared-assets theme.js asks GET /api/apps on the dashboard). That would put
-# the check above on every page anyone opens, so the answer is remembered per person: for five minutes at most, and dropped the moment the
+# the check above on every page anyone opens, so the answer is remembered per person: for a day at most, and dropped the moment the
 # dashboard itself changes that person's access (forget_apps). A change made somewhere the dashboard does not see (an app's own Users page,
-# an in-app invite) shows when the five minutes are up. An administrator's answer is every app, which costs nothing, so it is not remembered.
-APPS_CACHE_SECONDS = 300
+# an in-app invite) shows when the day is up. An administrator's answer is every app, which costs nothing, so it is not remembered.
+APPS_CACHE_SECONDS = 24 * 60 * 60  # only a safety net: the answer is dropped whenever access changes (see above)
 _apps_cache: dict = {}  # email -> (when, [{"key", "name", "icon", "url"}])
+
+
+def remembered_count() -> int:
+    return len(_apps_cache)
 
 
 def forget_apps(email: str = None) -> None:

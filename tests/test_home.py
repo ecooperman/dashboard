@@ -507,3 +507,17 @@ def test_the_check_is_marked_so_an_app_does_not_count_it_as_the_person_being_the
     production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
     production.get("/api/apps")
     assert apps_say.calls and all(call["headers"].get("X-Brassworks-Probe") == "1" for call in apps_say.calls)
+
+
+def test_an_answer_is_remembered_for_a_day_and_asked_again_after_that(production, key, apps_say, monkeypatch):
+    clock = [1_000_000.0]
+    monkeypatch.setattr(access.time, "time", lambda: clock[0])
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    production.get("/api/apps")
+    asked = len(apps_say.calls)
+    clock[0] += 23 * 3600
+    production.get("/api/apps")
+    assert len(apps_say.calls) == asked  # still the same answer 23 hours on
+    clock[0] += 2 * 3600
+    production.get("/api/apps")
+    assert len(apps_say.calls) == asked * 2  # a day has passed: asked afresh

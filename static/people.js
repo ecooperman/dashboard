@@ -254,3 +254,19 @@ function buildAddForm() {
 }
 
 load();
+
+
+// --- the menus' remembered apps ---------------------------------------------------------------------------------------
+
+document.getElementById("refresh-menus").addEventListener("click", async (e) => {
+  const button = e.currentTarget;
+  button.disabled = true;
+  try {
+    await Global.fetchJSON("/api/apps/forget", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    Global.showMessage("Done. The next page anyone opens asks the apps again.", "success");
+  } catch (err) {
+    Global.showMessage(err.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
