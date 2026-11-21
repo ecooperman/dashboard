@@ -194,7 +194,7 @@ def test_the_apps_are_called_on_this_machine_with_only_the_administrators_cookie
     assert apps.calls
     cookie = f"oidc_session={admin.cookies.get('oidc_session')}"  # the one the browser holds (not re-made: tokens differ by the second)
     for call in apps.calls:
-        assert call["headers"] == {"Cookie": cookie}
+        assert call["headers"] == {"X-Brassworks-Probe": "1", "Cookie": cookie}  # only their cookie, and marked so the app does not count it as use
         assert call["allow_redirects"] is False
     # only the fixed localhost addresses: nothing the request said decides where they go
     assert {c["app"] for c in apps.calls} == {"lists", "trips", "time", "plans", "finances", "resume"}

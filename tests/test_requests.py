@@ -10,7 +10,7 @@ import requests
 from shared_python import notify
 
 from app import config, people
-from tests.test_home import ISSUER, CLIENT, apps_say, id_token, key, locked_names, names, production  # noqa: F401 - fixtures
+from tests.test_home import ISSUER, CLIENT, apps_say, client, id_token, key, locked_names, names, production  # noqa: F401 - fixtures
 from tests.test_people import ADMIN, Apps, Reply, apps, mail, person  # noqa: F401 - fixtures
 
 BOB = "bob@example.com"
@@ -286,7 +286,7 @@ def test_approving_uses_the_administrators_own_session_like_ticking_a_box(produc
     person(production, key, ADMIN)
     production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"]})
     cookie = f"oidc_session={production.cookies.get('oidc_session')}"
-    assert apps.calls and all(c["headers"] == {"Cookie": cookie} and c["allow_redirects"] is False for c in apps.calls)
+    assert apps.calls and all(c["headers"] == {"X-Brassworks-Probe": "1", "Cookie": cookie} and c["allow_redirects"] is False for c in apps.calls)
 
 
 def test_declining_calls_no_app_sends_nothing_and_is_final_for_just_those_apps(production, key, apps, mail):  # noqa: F811
@@ -492,3 +492,54 @@ def test_the_digest_runs_from_start_up_and_stops_at_shut_down(monkeypatch, pushe
         while not pushes and time.time() < deadline:
             time.sleep(0.05)
     assert len(pushes) == 1
+
+
+def _remembered(email):
+    from app import access
+
+    access._apps_cache[email] = (time.time(), [])  # what the menu's list would hold for them
+    return access._apps_cache
+
+
+def test_the_menus_apps_for_a_person_are_forgotten_the_moment_the_administrator_changes_their_access(production, key, apps, mail):  # noqa: F811
+    cache = _remembered(BOB)
+    cache["someone.else@example.com"] = (time.time(), [])
+    people.file_requests(BOB, ["lists", "trips"], "")
+    person(production, key, ADMIN)
+    assert production.post("/api/requests/decide", json={"email": BOB, "approve": ["lists"]}).status_code == 200  # approving a request
+    assert BOB not in cache and "someone.else@example.com" in cache  # theirs only
+
+    _remembered(BOB)
+    assert production.put("/api/people/access", json={"email": BOB, "app": "finances", "enabled": True}).status_code == 200  # ticking
+    assert BOB not in cache
+    _remembered(BOB)
+    assert production.put("/api/people/access", json={"email": BOB, "app": "finances", "enabled": False}).status_code == 200  # unticking
+    assert BOB not in cache
+    _remembered(BOB)
+    assert production.post("/api/people", json={"email": BOB, "apps": ["time"]}).status_code == 200  # adding them to apps
+    assert BOB not in cache
+
+
+def test_the_menus_apps_are_forgotten_even_when_an_app_would_not_answer(production, key, apps, mail):  # noqa: F811
+    cache = _remembered(BOB)
+    apps.down.add("lists")
+    person(production, key, ADMIN)
+    assert production.put("/api/people/access", json={"email": BOB, "app": "lists", "enabled": True}).status_code == 502
+    assert BOB not in cache
+
+
+def test_an_app_can_tell_the_dashboard_that_someones_access_changed(client):
+    from app import access
+
+    cache = _remembered(BOB)
+    cache["someone.else@example.com"] = (time.time(), [])
+    assert client.post("/internal/access-changed", json={"email": "Bob@Example.com"}).status_code == 204
+    assert BOB not in cache and "someone.else@example.com" in cache  # theirs only, whatever the capitalisation
+
+
+def test_that_route_refuses_anything_that_came_through_the_internet(client):
+    cache = _remembered(BOB)
+    for header in ("Cf-Connecting-Ip", "Cf-Ray", "X-Forwarded-For"):
+        resp = client.post("/internal/access-changed", json={"email": BOB}, headers={header: "203.0.113.5"})
+        assert resp.status_code == 404
+    assert BOB in cache  # untouched

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import requests
+from shared_python import probe
 
 from . import config, people
 
@@ -37,7 +38,9 @@ def ask(app: dict, cookie: Tuple[str, str]) -> dict:
     """One app's answer: {"key", "name", "state", "why", "accounts"}. `state` is "ok", "not_reporting" (the app has no stats route yet:
     it has not been deployed with it), or "problem" (it did not answer, did not accept the sign-in, or said something unreadable)."""
     out = {"key": app["key"], "name": app["name"], "state": "problem", "why": "", "accounts": []}
-    headers = {"Cookie": f"{cookie[0]}={cookie[1]}"} if cookie and cookie[0] and cookie[1] else {}
+    headers = {probe.PROBE_HEADER: "1"}  # the dashboard acting for the administrator is not the administrator using that app
+    if cookie and cookie[0] and cookie[1]:
+        headers["Cookie"] = f"{cookie[0]}={cookie[1]}"
     try:
         resp = requests.request("GET", f"{config.APP_API_BASE[app['key']]}{STATS_ROUTE}", headers=headers, timeout=config.APP_CALL_TIMEOUT, allow_redirects=False)
     except requests.RequestException as exc:

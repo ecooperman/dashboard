@@ -57,6 +57,16 @@ REQUEST_DIGEST_MINUTES = max(1, int(os.environ.get("REQUEST_DIGEST_MINUTES", "5"
 APP_CHECK_TIMEOUT = 2  # seconds; an app that does not answer in time is left off the page
 
 
+def nav_origins() -> set:
+    """The pages allowed to read GET /api/apps from the browser (cross-origin, with the person's cookie): the apps' own addresses and the
+    dashboard's. Never a wildcard: the answer is about the signed-in person, so only our own pages may read it."""
+    hosts = {a["host"] for a in APPS} | {"dashboard.evancooperman.com"}
+    if ENV == "production":
+        return {f"https://{h}" for h in hosts}
+    ports = {a["port"] for a in APPS} | {8090}
+    return {f"http://{name}:{port}" for port in ports for name in ("localhost", "127.0.0.1")}
+
+
 def app_url(app: dict) -> str:
     return f"https://{app['host']}/" if ENV == "production" else f"http://localhost:{app['port']}/"
 

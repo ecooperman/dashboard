@@ -34,3 +34,13 @@ def _nothing_leaves_the_machine(monkeypatch):
         monkeypatch.setattr(requests, name, refuse)
     for name in logging.root.manager.loggerDict:
         logging.getLogger(name).disabled = False
+
+
+@pytest.fixture(autouse=True)
+def _forget_remembered_apps():
+    """The navigation's apps list is remembered for a minute per person; one test must never see another's."""
+    from app import access
+
+    access.forget_apps()
+    yield
+    access.forget_apps()

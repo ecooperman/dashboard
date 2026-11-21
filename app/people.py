@@ -17,7 +17,7 @@ from contextlib import closing
 from typing import Dict, List, Optional, Tuple
 
 import requests
-from shared_python import notify
+from shared_python import notify, probe
 
 from . import config
 
@@ -238,7 +238,9 @@ def member_apps() -> List[dict]:
 
 def _call(app: dict, method: str, suffix: str = "", cookie: Optional[Tuple[str, str]] = None, **kwargs) -> requests.Response:
     base = config.APP_API_BASE[app["key"]]
-    headers = {"Cookie": f"{cookie[0]}={cookie[1]}"} if cookie and cookie[0] and cookie[1] else {}
+    headers = {probe.PROBE_HEADER: "1"}  # the dashboard acting for the administrator is not the administrator using that app
+    if cookie and cookie[0] and cookie[1]:
+        headers["Cookie"] = f"{cookie[0]}={cookie[1]}"
     try:
         resp = requests.request(
             method, f"{base}{config.APP_USERS[app['key']]['route']}{suffix}", headers=headers,

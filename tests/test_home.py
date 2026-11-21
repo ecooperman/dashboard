@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from shared_python import auth, settings
 
-from app import config, people
+from app import access, config, people
 from app.main import app
 
 ISSUER = "https://login.example.com"
@@ -401,7 +401,7 @@ def test_the_apps_are_asked_on_this_machine_with_the_persons_own_cookie_and_redi
         "http://127.0.0.1:8060/api/me", "http://127.0.0.1:8080/api/me",
     ]
     for call in apps_say.calls:
-        assert call["headers"] == {"Cookie": f"oidc_session={token}"}
+        assert call["headers"] == {"X-Brassworks-Probe": "1", "Cookie": f"oidc_session={token}"}  # the probe mark, and only their own cookie
         assert call["allow_redirects"] is False and call["timeout"] == config.APP_CHECK_TIMEOUT
 
 
@@ -411,7 +411,7 @@ def test_nobody_elses_cookie_or_extra_cookies_are_forwarded(production, key, app
     production.cookies.set("other_site", "secret")
     production.get("/")
     for call in apps_say.calls:
-        assert list(call["headers"]) == ["Cookie"] and call["headers"]["Cookie"].startswith("oidc_session=")
+        assert sorted(call["headers"]) == ["Cookie", "X-Brassworks-Probe"] and call["headers"]["Cookie"].startswith("oidc_session=")
         assert "secret" not in call["headers"]["Cookie"] and "theme" not in call["headers"]["Cookie"]
 
 
@@ -438,3 +438,72 @@ def test_an_administrator_address_with_mail_link_punctuation_cannot_add_headers_
     to, query = link[len("mailto:"):].split("?", 1)
     assert "?" not in to and "&" not in to and "=" not in to  # the address stays one address
     assert [part.split("=")[0] for part in query.split("&")] == ["subject", "body"]  # only the headers we set
+
+
+# --- the apps list every app's navigation shows (GET /api/apps) ---------------------------------------------------------
+
+
+def test_the_nav_apps_are_those_the_person_may_open_with_a_link_each(production, key, apps_say):
+    apps_say.status["trips"] = 403
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    resp = production.get("/api/apps")
+    assert resp.status_code == 200
+    assert [a["key"] for a in resp.json()["apps"]] == ["lists", "time", "plans", "finances", "resume"]
+    lists = resp.json()["apps"][0]
+    assert lists == {"key": "lists", "name": "Lists", "icon": "list", "url": "https://lists.evancooperman.com/"}
+    assert "no-store" in resp.headers["cache-control"]  # the answer is about one person: never kept by a cache
+
+
+def test_the_administrator_gets_every_app_without_asking_any(production, key):
+    production.cookies.set("oidc_session", id_token(key, "admin@example.com"))
+    assert [a["key"] for a in production.get("/api/apps").json()["apps"]] == [a["key"] for a in config.APPS]  # no stub: asking would fail
+
+
+def test_nav_apps_needs_a_sign_in_and_is_a_401_the_apps_pages_can_read(production):
+    resp = production.get("/api/apps", headers={"Origin": "https://lists.evancooperman.com"})
+    assert resp.status_code == 401
+    assert resp.headers["access-control-allow-origin"] == "https://lists.evancooperman.com"
+
+
+def test_only_our_own_pages_may_read_nav_apps_with_the_cookie(production, key, apps_say):
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    mine = production.get("/api/apps", headers={"Origin": "https://lists.evancooperman.com"})
+    assert mine.headers["access-control-allow-origin"] == "https://lists.evancooperman.com"
+    assert mine.headers["access-control-allow-credentials"] == "true" and "Origin" in mine.headers["vary"]
+    for stranger in ("https://evil.example.com", "https://lists.evancooperman.com.evil.example.com", "http://lists.evancooperman.com", "null"):
+        resp = production.get("/api/apps", headers={"Origin": stranger})
+        assert "access-control-allow-origin" not in resp.headers and "access-control-allow-credentials" not in resp.headers
+    assert "access-control-allow-origin" not in production.get("/api/apps").headers  # a same-origin request needs none
+
+
+def test_locally_the_apps_local_addresses_may_read_it(client):
+    resp = client.get("/api/apps", headers={"Origin": "http://localhost:8060"})
+    assert resp.status_code == 200 and resp.headers["access-control-allow-origin"] == "http://localhost:8060"
+    assert "access-control-allow-origin" not in client.get("/api/apps", headers={"Origin": "https://lists.evancooperman.com"}).headers
+
+
+def test_asking_for_nav_apps_again_within_a_minute_does_not_ask_the_apps_again(production, key, apps_say):
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    production.get("/api/apps")
+    asked = len(apps_say.calls)
+    assert asked == 6  # each app with accounts, once
+    for _ in range(5):
+        production.get("/api/apps")
+    assert len(apps_say.calls) == asked
+    access.forget_apps()
+    production.get("/api/apps")
+    assert len(apps_say.calls) == asked * 2  # and it does ask again once the minute is up (here: forgotten)
+
+
+def test_an_app_that_did_not_answer_is_not_remembered_as_no_access(production, key, apps_say):
+    apps_say.status["lists"] = requests.ConnectionError("down")
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    assert "lists" not in [a["key"] for a in production.get("/api/apps").json()["apps"]]
+    apps_say.status["lists"] = 200  # it came back
+    assert "lists" in [a["key"] for a in production.get("/api/apps").json()["apps"]]
+
+
+def test_the_check_is_marked_so_an_app_does_not_count_it_as_the_person_being_there(production, key, apps_say):
+    production.cookies.set("oidc_session", id_token(key, "alice@example.com"))
+    production.get("/api/apps")
+    assert apps_say.calls and all(call["headers"].get("X-Brassworks-Probe") == "1" for call in apps_say.calls)

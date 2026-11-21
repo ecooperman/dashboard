@@ -96,7 +96,7 @@ def test_every_app_is_asked_as_the_administrator_with_their_own_cookie_and_no_re
     assert sorted(c["app"] for c in apps.calls) == sorted(PORTS.values())
     for call in apps.calls:
         assert call["method"] == "GET" and call["url"].startswith("http://127.0.0.1:") and call["allow_redirects"] is False
-        assert call["headers"]["Cookie"].startswith("oidc_session=")
+        assert call["headers"]["Cookie"].startswith("oidc_session=") and call["headers"]["X-Brassworks-Probe"] == "1"
 
 
 # --- putting the answers together -------------------------------------------------------------------------------------------

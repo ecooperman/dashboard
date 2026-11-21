@@ -12,13 +12,14 @@ deploy) is never mistaken for "you don't have access", and an app they may alrea
 The session cookie is sent to the fixed localhost addresses in config.APP_API_BASE and nowhere else, and
 redirects are never followed, so it cannot be bounced elsewhere."""
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 from urllib.parse import quote
 
 import requests
 from fastapi import Request
-from shared_python import auth
+from shared_python import auth, probe
 
 from . import config
 
@@ -35,7 +36,10 @@ def _account_state(app: dict, cookie_name: str, cookie_value: str) -> str:
     base = config.APP_API_BASE.get(app["key"])
     if not base:
         return "error"
-    headers = {"Cookie": f"{cookie_name}={cookie_value}"} if cookie_name and cookie_value else {}
+    # The probe header keeps this check from counting as the person having been in that app (shared_python.probe).
+    headers = {probe.PROBE_HEADER: "1"}
+    if cookie_name and cookie_value:
+        headers["Cookie"] = f"{cookie_name}={cookie_value}"
     try:
         resp = requests.get(f"{base}/api/me", headers=headers, timeout=config.APP_CHECK_TIMEOUT, allow_redirects=False)
     except requests.RequestException as exc:
@@ -91,3 +95,35 @@ def customer_service_link(email: str, broken: List[dict]) -> str:
 def apps_for(request: Request, email: str) -> List[dict]:
     """The apps to show `email`, in the order of config.APPS, each with its address."""
     return apps_and_locked(request, email)[0]
+
+
+# --- the apps list for every app's navigation ---------------------------------------------------------------------------------------
+# Every app's sidebar ends with the apps this person may open (shared-assets theme.js asks GET /api/apps on the dashboard). That would put
+# the check above on every page anyone opens, so the answer is remembered per person: for five minutes at most, and dropped the moment the
+# dashboard itself changes that person's access (forget_apps). A change made somewhere the dashboard does not see (an app's own Users page,
+# an in-app invite) shows when the five minutes are up. An administrator's answer is every app, which costs nothing, so it is not remembered.
+APPS_CACHE_SECONDS = 300
+_apps_cache: dict = {}  # email -> (when, [{"key", "name", "icon", "url"}])
+
+
+def forget_apps(email: str = None) -> None:
+    """Drop what is remembered about one person (or everyone, with no address). Called whenever the dashboard changes someone's access
+    (adding them, ticking or unticking an app, approving a request), so the change shows at once instead of when the time is up."""
+    if email is None:
+        _apps_cache.clear()
+    else:
+        _apps_cache.pop(email.strip().lower(), None)
+
+
+def nav_apps(request: Request, email: str, now: float = None) -> List[dict]:
+    """The apps `email` may open, for the navigation: just what a link needs, in the order of config.APPS."""
+    now = time.time() if now is None else now
+    if email not in config.ADMIN_EMAILS:
+        found = _apps_cache.get(email)
+        if found and now - found[0] < APPS_CACHE_SECONDS:
+            return found[1]
+    shown, _locked, broken = apps_and_locked(request, email)
+    apps = [{"key": a["key"], "name": a["name"], "icon": a["icon"], "url": a["url"]} for a in shown]
+    if email not in config.ADMIN_EMAILS and not broken:  # an app that did not answer is not remembered as "no access": ask again next time
+        _apps_cache[email] = (now, apps)
+    return apps

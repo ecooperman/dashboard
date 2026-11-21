@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -94,6 +94,38 @@ def me(request: Request):
     if is_admin:
         out["waiting_requests"] = people.waiting_count()  # for the menu's badge on People
     return out
+
+
+@app.get("/api/apps")
+async def apps_for_nav(request: Request):
+    """The apps this person may open, for the sidebar every app shows (shared-assets theme.js). Read from the apps' own pages, so it
+    answers cross-origin for the addresses in config.nav_origins() only (with credentials: the cookie is the sign-in). Remembered for a
+    few minutes per person (app/access.py) and forgotten when an administrator changes their access, so opening pages does not ask every app every time."""
+    headers = {"Cache-Control": "private, no-store", "Vary": "Origin"}
+    origin = request.headers.get("origin", "")
+    if origin in config.nav_origins():
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    try:
+        email = signed_in_email(request)
+    except HTTPException:
+        return JSONResponse({"detail": "Not signed in"}, status_code=401, headers=headers)  # with the headers, so the page can read the 401
+    apps = await asyncio.to_thread(access.nav_apps, request, email)  # asking the apps blocks, so off the event loop
+    return JSONResponse({"apps": apps}, headers=headers)
+
+
+class AccessChanged(BaseModel):
+    email: str
+
+
+@app.post("/internal/access-changed", status_code=204)
+def access_changed(body: AccessChanged, request: Request):
+    """An app tells us that someone's access to it just changed (shared_python.access_events), so their menu's list of apps is asked
+    for afresh. Only for the apps on this machine: anything that arrived through the internet (Cloudflare marks every such request)
+    is refused as if the route did not exist. All it does is drop one remembered answer."""
+    if any(header in request.headers for header in ("cf-connecting-ip", "cf-ray", "x-forwarded-for")):
+        raise HTTPException(status_code=404, detail="Not Found")
+    access.forget_apps(body.email)
 
 
 # --- the central Users page and people's names ---------------------------------------------------------------------------
@@ -252,6 +284,7 @@ def decide_request(body: Decision, request: Request, background: BackgroundTasks
             failed.append(str(exc))  # that one stays waiting
     people.settle_requests(email, let_in)
     people.settle_requests(email, [t["key"] for t in decline], decline=True)
+    access.forget_apps(email)  # their menu's list of apps changes at once
     if added:
         background.add_task(people.tell_them, email, admin, added)
     return {"added": added, "failed": failed, "left_waiting": people.requests_for(email)}
@@ -298,6 +331,7 @@ def add_person(body: PersonAdd, request: Request, background: BackgroundTasks):
     if first or last:
         people.set_name(email, first, last)
     people.settle_requests(email, [t["key"] for t in chosen if t["name"] in added or t["name"] in already])
+    access.forget_apps(email)
     if added:
         background.add_task(people.tell_them, email, admin, added)
     return {"email": email, "added": added, "already": already, "failed": failed}
@@ -320,6 +354,8 @@ def change_access(body: AccessChange, request: Request, background: BackgroundTa
             result = people.revoke(target, email, cookie)
     except people.AppProblem as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+    finally:
+        access.forget_apps(email)  # whatever happened, ask the apps afresh next time
     return {"result": result}
 
 
