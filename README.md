@@ -30,6 +30,13 @@ session (never from the request body), after re-asking the app; one request per 
 ticking a box, one email) or **Decline** (final) those; anything left unticked stays waiting for a later decision, and so does an app
 that can't be reached.
 
+**Usage (`/stats.html`) and a person's page (`/person.html?email=`)**, administrators only (`app/stats.py`): a rough picture of whether and how the apps are
+used. Each member app answers its own administrator-only `GET /api/admin/stats` (counts and dates only, from `shared_python.usage`); the dashboard asks all of
+them in parallel as the signed-in administrator (their own cookie, the same fixed localhost addresses, no redirects followed) and shows every app side by side
+(people, active in 7 and 30 days, never used it, last activity, and the totals of what they keep) plus the people across apps (with an account, active, in more
+than one app, waiting requests). A person's page shows the same for one person in each app, with their access requests. Active means last seen, or the newest
+thing they made, inside the window; administrators are left out unless a box is ticked; an app that is down or not updated yet is named and left out of the sums.
+
 **When an app has a real problem** (an error answer, a timeout or no answer from its `/api/me`, for example while it restarts during a
 deploy) the home page shows it as a red tile with "Couldn't check your access just now", plus a note to reload in a minute and a
 **customer service** link: a `mailto:` to every address in `ADMIN_EMAILS` with what happened filled in. A 403 is a plain "no account"

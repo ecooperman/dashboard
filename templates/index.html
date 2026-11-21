@@ -77,7 +77,7 @@
     {% if is_admin %}
     <section class="section">
       <h2>People</h2>
-      <p><a class="secondary-btn" data-btn-icon="users" href="/users.html">Manage who can use what</a></p>
+      <p><a class="secondary-btn" data-btn-icon="users" href="/users.html">Manage who can use what</a> <a class="secondary-btn" data-btn-icon="eye" href="/stats.html">See how the apps are used</a></p>
       {% if waiting %}<p class="field-hint" id="waiting-note">{{ waiting }} request{{ "" if waiting == 1 else "s" }} waiting for you.</p>{% endif %}
     </section>
     {% endif %}

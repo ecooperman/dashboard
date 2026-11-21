@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-ui="v2">
+<head>
+  <title>Person - Brassworks</title>
+{% include "_head.html" %}
+</head>
+<body>
+  <header class="app-header">
+    <h1 id="who">Person</h1>
+    <p class="subtitle"><a href="/users.html">Back to People</a> &middot; <a href="/stats.html">Usage</a></p>
+  </header>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="section">
+      <h2>Overall</h2>
+      <div id="overall"></div>
+    </section>
+
+    <section class="section">
+      <h2>In each app</h2>
+      <p class="field-hint">Counts and dates only; nothing they wrote is shown here. "Last active" is the later of when they last used the app and the newest thing they made in it.</p>
+      <div id="apps"></div>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/usage.js"></script>
+  <script src="/person.js"></script>
+</body>
+</html>

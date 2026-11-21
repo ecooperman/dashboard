@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-ui="v2">
+<head>
+  <title>Usage - Brassworks</title>
+{% include "_head.html" %}
+</head>
+<body>
+  <header class="app-header">
+    <h1>Usage</h1>
+    <p class="subtitle"><a href="/">Back to your apps</a> &middot; <a href="/users.html">People</a></p>
+  </header>
+
+  <main>
+    <div id="page-message" class="page-message hidden"></div>
+
+    <section class="section">
+      <h2>Is anyone using these?</h2>
+      <p class="field-hint">A rough picture from each app's own numbers: when people last used it and how much they have in it. Only counts and dates, never what anyone wrote. Someone counts as active when they used an app, or made something in it, in the last 7 or 30 days. Time on each app starts being recorded when it is next updated, so a quiet person may show as new for a few days.</p>
+      <label class="stats-toggle"><input type="checkbox" id="include-admins"> Include administrators (left out by default, so your own use does not drown out everyone else's)</label>
+      <div id="overall"></div>
+    </section>
+
+    <section class="section">
+      <h2>By app</h2>
+      <div id="apps"></div>
+    </section>
+  </main>
+
+  <script src="{{ shared_assets_base }}/theme.js"></script>
+  <script src="{{ shared_assets_base }}/icons.js"></script>
+  <script src="/usage.js"></script>
+  <script src="/stats.js"></script>
+</body>
+</html>

@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from shared_python import auth, csrf, oidc_login
 
-from . import access, config, people
+from . import access, config, people, stats
 
 # The front door for every app: /auth/login, /auth/callback and /auth/logout (shared_python.oidc_login)
 # sign people in through the identity provider and set the session cookie for the whole parent
@@ -166,6 +166,42 @@ def users_page(request: Request):
     except HTTPException:
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse(request, "users.html", {"shared_assets_base": config.SHARED_ASSETS_BASE})
+
+
+def _admin_page(request: Request, template: str):
+    """A page for administrators only; anyone else goes home."""
+    try:
+        admin_email(request)
+    except HTTPException:
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse(request, template, {"shared_assets_base": config.SHARED_ASSETS_BASE})
+
+
+@app.get("/stats.html", response_class=HTMLResponse)
+def stats_page(request: Request):
+    """How the apps are being used, side by side."""
+    return _admin_page(request, "stats.html")
+
+
+@app.get("/person.html", response_class=HTMLResponse)
+def person_page(request: Request):
+    """One person across every app (the address is in the query, ?email=)."""
+    return _admin_page(request, "person.html")
+
+
+@app.get("/api/stats")
+def get_stats(request: Request, admins: bool = False):
+    """Every app's usage side by side. Administrators are left out of the sums unless `admins` is true."""
+    admin_email(request)
+    return stats.overview(session_cookie(request), include_admins=admins)
+
+
+@app.get("/api/stats/person")
+def get_person_stats(email: str, request: Request):
+    admin_email(request)
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="That doesn't look like an email address")
+    return stats.person(email, session_cookie(request))
 
 
 @app.get("/api/people")

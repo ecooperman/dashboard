@@ -215,3 +215,45 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* The Usage and person pages: big-number cards, and one block per app. */
+.stats-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 0 16px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.stat-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted-bg);
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-caption {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stat-app {
+  padding: 4px 0 12px;
+}
+
+.stat-app + .stat-app {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}

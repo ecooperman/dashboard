@@ -121,7 +121,7 @@ function row(person) {
     const name = displayName(person);
     nameBox.replaceChildren(
       Global.el("div", { class: "people-name" }, [
-        Global.el("strong", { text: name || person.email }),
+        Global.el("strong", {}, [Global.el("a", { href: `/person.html?email=${encodeURIComponent(person.email)}`, title: "See how they use the apps", text: name || person.email })]),
         Global.el("button", { type: "button", class: "link-btn", "data-btn-icon": "none", text: name ? "Edit name" : "Add name" }),
       ]),
       ...(name ? [Global.el("div", { class: "field-hint", text: person.email })] : [])
