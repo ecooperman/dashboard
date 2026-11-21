@@ -35,7 +35,7 @@ APPS = [
      "blurb": "Places and ideas to do, saved from around the web.", "access": "member"},
     {"key": "finances", "name": "Finances", "host": "finances.evancooperman.com", "port": 8080, "icon": "wallet",
      "blurb": "The household budget.", "access": "member"},
-    {"key": "resume", "name": "Resume", "host": "resume-admin.evancooperman.com", "port": 8041, "icon": "briefcase",
+    {"key": "resume", "name": "Resume", "host": "jobs.evancooperman.com", "port": 8041, "icon": "briefcase",
      "blurb": "Build your resume and keep it up to date.", "access": "member"},
     {"key": "flights", "name": "Flights", "host": "flights.evancooperman.com", "port": 8050, "icon": "plane",
      "blurb": "Flight market agents.", "access": "admin"},
