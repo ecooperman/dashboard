@@ -156,7 +156,7 @@ def test_me_is_a_401_when_signed_out(production):
 
 def test_me_says_who_and_where_log_out_goes(production, key):
     production.cookies.set("oidc_session", id_token(key, "admin@example.com"))
-    assert production.get("/api/me").json() == {"email": "admin@example.com", "is_admin": True, "logout_url": "/auth/logout", "waiting_requests": 0}
+    assert production.get("/api/me").json() == {"email": "admin@example.com", "is_admin": True, "logout_url": "/auth/logout", "waiting_requests": 0, "waiting_feedback": 0}
 
 
 def test_me_tells_only_an_administrator_how_many_requests_are_waiting(production, key):

@@ -6,6 +6,7 @@ stored: all that is kept is, per day and app, how many other people and how many
 only, like the rest of the stats pages, and it starts when each app is next deployed (nothing before that was recorded). A message that
 never arrives (the dashboard was down at that moment) is a person-day missing for good: this is a rough picture, not an audit."""
 import sqlite3
+from contextlib import closing
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -34,12 +35,13 @@ def record(app_key: str, email: str, day: str, today: Optional[date] = None) -> 
     if abs((when - today).days) > 2:
         raise ValueError("That day is not recent")
     is_admin = email.strip().lower() in config.ADMIN_EMAILS
-    with _connect() as connection:
+    with closing(_connect()) as connection:
         connection.execute(
             "INSERT INTO daily_active (day, app, people, admins) VALUES (?, ?, ?, ?) "
             "ON CONFLICT (day, app) DO UPDATE SET people = people + excluded.people, admins = admins + excluded.admins",
             (day, app_key, 0 if is_admin else 1, 1 if is_admin else 0),
         )
+        connection.commit()
 
 
 def series(include_admins: bool = False, today: Optional[date] = None, days: int = DAYS_SHOWN) -> dict:
@@ -50,7 +52,7 @@ def series(include_admins: bool = False, today: Optional[date] = None, days: int
     keys = [a["key"] for a in config.APPS if a["access"] == "member"]
     names = {a["key"]: a["name"] for a in config.APPS}
     counts: Dict[str, Dict[str, int]] = {key: {day: 0 for day in labels} for key in keys}
-    with _connect() as connection:
+    with closing(_connect()) as connection:
         for day, app_key, people, admins in connection.execute("SELECT day, app, people, admins FROM daily_active WHERE day >= ?", (labels[0],)):
             if app_key in counts and day in counts[app_key]:
                 counts[app_key][day] += people + (admins if include_admins else 0)

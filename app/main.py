@@ -6,14 +6,15 @@ from pathlib import Path
 
 from typing import List, Optional
 
+import requests
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from shared_python import auth, csrf, oidc_login
 
-from . import access, config, people, stats, trend
+from . import access, config, feedback, people, stats, trend
 
 # The front door for every app: /auth/login, /auth/callback and /auth/logout (shared_python.oidc_login)
 # sign people in through the identity provider and set the session cookie for the whole parent
@@ -92,7 +93,8 @@ def me(request: Request):
     is_admin = email in config.ADMIN_EMAILS
     out = {"email": email, "is_admin": is_admin, "logout_url": oidc_login.logout_url(request)}
     if is_admin:
-        out["waiting_requests"] = people.waiting_count()  # for the menu's badge on People
+        out["waiting_requests"] = people.waiting_count()  # for the menu's badge on Users
+        out["waiting_feedback"] = feedback.waiting_count()  # and on Feedback
     return out
 
 
@@ -128,6 +130,101 @@ def forget_menu_apps(body: MenuRefresh, request: Request):
     return {"cleared": before - access.remembered_count()}
 
 
+# --- Send feedback, for every app (app/feedback.py) ----------------------------------------------------------------------------
+
+
+class FeedbackIn(BaseModel):
+    kind: str
+    body: str = Field(max_length=feedback.MAX_BODY * 2)  # trimmed and checked in feedback.send, so the person gets a sentence, not a validation error
+    page: Optional[str] = Field(default=None, max_length=300)
+
+
+class RelayedFeedback(FeedbackIn):
+    app: str
+
+
+def _keep_feedback(app_key: str, email: str, body: FeedbackIn, background: BackgroundTasks) -> dict:
+    try:
+        message = feedback.send(app_key, email, body.kind, body.body, body.page)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except feedback.TooMany as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    background.add_task(feedback.announce, message)
+    return message
+
+
+def _no_internet(request: Request) -> None:
+    """The routes only the apps on this machine may call: anything that came through the internet is refused as if they did not exist."""
+    if any(header in request.headers for header in ("cf-connecting-ip", "cf-ray", "x-forwarded-for")):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+@app.post("/api/feedback")
+async def send_feedback_from_the_dashboard(body: FeedbackIn, request: Request, background: BackgroundTasks):
+    """A message from one of the dashboard's own pages. Only someone who can open an app (or an administrator) may send one."""
+    email = signed_in_email(request)
+    if email not in config.ADMIN_EMAILS and not await asyncio.to_thread(access.nav_apps, request, email):
+        raise HTTPException(status_code=403, detail="Only people who have been let into an app can send feedback")
+    return _keep_feedback(feedback.DASHBOARD_KEY, email, body, background)
+
+
+@app.post("/internal/feedback")
+def relayed_feedback(body: RelayedFeedback, request: Request, background: BackgroundTasks):
+    """A message an app passes on (shared_python.feedback_relay): the person's own session cookie comes with it, and the app has already
+    checked they have an account there. Only for the apps on this machine."""
+    _no_internet(request)
+    email = signed_in_email(request)
+    return _keep_feedback(body.app, email, body, background)
+
+
+@app.get("/api/feedback/mine")
+def my_feedback(request: Request):
+    """What this person has sent, newest first, so they can see it went."""
+    return {"messages": feedback.mine(signed_in_email(request))}
+
+
+@app.get("/api/feedback")
+def feedback_inbox(request: Request):
+    admin_email(request)
+    return {"messages": feedback.inbox(), "can_import_jobs": not feedback.imported_from_jobs()}
+
+
+@app.post("/api/feedback/import-jobs")
+def import_jobs_feedback(request: Request):
+    """Once: copy what people sent from the Jobs app's own Send feedback page into this inbox (as messages from Jobs)."""
+    admin_email(request)
+    cookie = session_cookie(request)
+    headers = {"Cookie": f"{cookie[0]}={cookie[1]}"} if cookie[0] and cookie[1] else {}
+    try:
+        resp = requests.get(f"{config.APP_API_BASE['resume']}/api/admin/messages", headers=headers, timeout=config.APP_CALL_TIMEOUT, allow_redirects=False)
+        rows = resp.json() if resp.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        rows = None
+    if rows is None:
+        raise HTTPException(status_code=502, detail="The Jobs app didn't give up its messages. Try again in a moment.")
+    return {"copied": feedback.import_from_jobs(rows)}
+
+
+@app.post("/api/feedback/{message_id}/{action}")
+def settle_feedback(message_id: int, action: str, request: Request):
+    admin_email(request)
+    if action not in ("done", "reopen"):
+        raise HTTPException(status_code=404, detail="Not found")
+    message = feedback.set_done(message_id, action == "done")
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return message
+
+
+@app.delete("/api/feedback/{message_id}")
+def delete_feedback(message_id: int, request: Request):
+    admin_email(request)
+    if not feedback.remove(message_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True}
+
+
 class AccessChanged(BaseModel):
     email: str
 
@@ -137,8 +234,7 @@ def access_changed(body: AccessChanged, request: Request):
     """An app tells us that someone's access to it just changed (shared_python.access_events), so their menu's list of apps is asked
     for afresh. Only for the apps on this machine: anything that arrived through the internet (Cloudflare marks every such request)
     is refused as if the route did not exist. All it does is drop one remembered answer."""
-    if any(header in request.headers for header in ("cf-connecting-ip", "cf-ray", "x-forwarded-for")):
-        raise HTTPException(status_code=404, detail="Not Found")
+    _no_internet(request)
     access.forget_apps(body.email)
 
 
@@ -153,8 +249,7 @@ def active_day(body: ActiveDay, request: Request):
     """An app tells us someone used it today (shared_python.usage), once per person per day, for the Usage page's daily chart (app/trend.py).
     Only for the apps on this machine: anything that came through the internet (Cloudflare marks every such request) is refused as if
     the route did not exist."""
-    if any(header in request.headers for header in ("cf-connecting-ip", "cf-ray", "x-forwarded-for")):
-        raise HTTPException(status_code=404, detail="Not Found")
+    _no_internet(request)
     if not any(a["key"] == body.app and a["access"] == "member" for a in config.APPS):
         raise HTTPException(status_code=400, detail="That isn't an app")
     try:
@@ -242,6 +337,12 @@ def _admin_page(request: Request, template: str):
     except HTTPException:
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse(request, template, {"shared_assets_base": config.SHARED_ASSETS_BASE})
+
+
+@app.get("/feedback.html", response_class=HTMLResponse)
+def feedback_page(request: Request):
+    """The messages people sent from any app, by app."""
+    return _admin_page(request, "feedback.html")
 
 
 @app.get("/stats.html", response_class=HTMLResponse)

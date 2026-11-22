@@ -97,3 +97,13 @@ person on a new UTC day (`POST /internal/active-day`, from `shared_python.usage`
 the dashboard keeps only, per day and app, how many other people and how many administrators were there (`daily_active` in `people.db`,
 `app/trend.py`), never an address. History starts when each app is next deployed. A report lost while the dashboard is down is a missing
 person-day, not recovered. The administrators checkbox applies to the chart too.
+
+## Feedback (one inbox for every app)
+
+People send a problem, an idea or a question from the **Send feedback** entry in any app's menu; the app passes it on
+(`shared_python.feedback_relay` -> `POST /internal/feedback`, refused for anything that came through the internet) and the dashboard keeps it
+in `people.db` (`app/feedback.py`) with the app it came from and the page they were on. The administrator is told (ntfy, Pushover or
+`NOTIFY_EMAIL`, the same channels as access requests) and reads, ticks off and deletes messages by app on the **Feedback** page (menu,
+Admin group, with a count of those waiting). Each person sees what they sent, and whether it was dealt with, on their **Profile** page.
+Ten a day per person, 4000 characters, no attachments. The Jobs app's old messages are copied in once with the button on the Feedback page.
+

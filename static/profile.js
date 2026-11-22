@@ -36,3 +36,32 @@ Global.mountUserBadge();
   box.replaceChildren(first, last, save);
   Global.iconifyButtons && Global.iconifyButtons(box);
 })();
+
+
+// What they have sent through Send feedback, newest first, so they can see it went.
+(async function mountMessages() {
+  const box = document.getElementById("my-feedback");
+  if (!box) return;
+  let messages = [];
+  try {
+    messages = (await Global.fetchJSON("/api/feedback/mine")).messages;
+  } catch (err) {
+    box.replaceChildren(Global.el("p", { class: "field-hint is-error", text: err.message }));
+    return;
+  }
+  if (!messages.length) {
+    box.replaceChildren(Global.el("p", { class: "field-hint", text: "Nothing sent yet." }));
+    return;
+  }
+  box.replaceChildren(
+    ...messages.map((m) =>
+      Global.el("div", { class: "request-card" }, [
+        Global.el("div", { class: "request-info" }, [
+          Global.el("strong", { text: `${m.app_name} - ${m.kind_label} - ${m.done_at != null ? "Dealt with" : "Waiting"}` }),
+          Global.el("div", { class: "field-hint", text: new Date(m.created_at * 1000).toLocaleString() }),
+          Global.el("div", { text: m.body, style: "white-space: pre-wrap" }),
+        ]),
+      ])
+    )
+  );
+})();
