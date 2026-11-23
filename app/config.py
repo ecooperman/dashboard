@@ -23,7 +23,8 @@ if ENV != "production":
 #   "member" - the app has its own accounts (lists, trips, time, plans, finances, resume): a person sees it only if THAT app says they
 #              have an account (asked over localhost with their own session cookie, see app/access.py);
 #   "admin"  - a private app with no accounts yet (flights): only the administrators see it.
-# Administrators see every app.
+# Administrators see every app, except one marked `"hidden": True`: that app keeps running and keeps its address (and may still use the shared
+# menu), but is left off the landing page and every menu's apps list for everyone (flights, which Evan does not use).
 APPS = [
     {"key": "lists", "name": "Lists", "host": "lists.evancooperman.com", "port": 8030, "icon": "list",
      "blurb": "Gift ideas, shopping lists, anything worth keeping track of.", "access": "member"},
@@ -38,7 +39,7 @@ APPS = [
     {"key": "resume", "name": "Jobs", "host": "jobs.evancooperman.com", "port": 8041, "icon": "briefcase",
      "blurb": "Collect jobs, see how well each fits you, and get a resume and cover letter made for each.", "access": "member"},
     {"key": "flights", "name": "Flights", "host": "flights.evancooperman.com", "port": 8050, "icon": "plane",
-     "blurb": "Flight market agents.", "access": "admin"},
+     "blurb": "Flight market agents.", "access": "admin", "hidden": True},
 ]
 
 # Where the dashboard asks a "member" app whether someone has an account: the app's own process on this machine
@@ -65,6 +66,11 @@ def nav_origins() -> set:
         return {f"https://{h}" for h in hosts}
     ports = {a["port"] for a in APPS} | {8090}
     return {f"http://{name}:{port}" for port in ports for name in ("localhost", "127.0.0.1")}
+
+
+def visible_apps() -> list:
+    """The apps to show anyone (see `hidden` above)."""
+    return [a for a in APPS if not a.get("hidden")]
 
 
 def app_url(app: dict) -> str:

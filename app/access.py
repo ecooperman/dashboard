@@ -73,7 +73,7 @@ def apps_and_locked(request: Request, email: str) -> Tuple[List[dict], List[dict
     """For `email`: the apps to show (each with its address), the apps they could ask for (those that said "no"), and the
     apps that could not be checked because of a problem (shown in red, with a way to reach the administrators)."""
     if email in config.ADMIN_EMAILS:
-        return [dict(a, url=config.app_url(a)) for a in config.APPS], [], []
+        return [dict(a, url=config.app_url(a)) for a in config.visible_apps()], [], []
     states = account_states(request, email)
     shown = [dict(a, url=config.app_url(a)) for a in config.APPS if states.get(a["key"]) == "yes"]
     locked = [dict(a) for a in config.APPS if states.get(a["key"]) == "no"]

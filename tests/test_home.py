@@ -100,7 +100,7 @@ def locked_names(html):
 def test_locally_the_dev_user_sees_every_app_at_its_local_address(client):
     resp = client.get("/")
     assert resp.status_code == 200 and "dev@localhost.test" in resp.text
-    assert names(resp.text) == [a["name"] for a in config.APPS]
+    assert names(resp.text) == [a["name"] for a in config.visible_apps()]
     assert "http://localhost:8030/" in resp.text and "http://localhost:8060/" in resp.text
 
 
@@ -119,7 +119,7 @@ def test_an_ordinary_signed_in_person_sees_the_apps_that_say_they_have_an_accoun
 
 def test_the_administrator_sees_every_app(production, key):
     production.cookies.set("oidc_session", id_token(key, "Admin@Example.com"))  # case does not matter
-    assert names(production.get("/").text) == [a["name"] for a in config.APPS]
+    assert names(production.get("/").text) == [a["name"] for a in config.visible_apps()]
 
 
 def test_an_email_is_escaped_in_the_page(production, key, apps_say):
@@ -388,7 +388,7 @@ def test_private_apps_are_never_offered_to_anyone_but_an_administrator(productio
 
 def test_an_administrator_sees_every_app_without_anything_being_asked(production, key, apps_say):
     apps_say.status = {"lists": 403, "trips": 403, "time": 403, "plans": 403, "finances": 403}
-    assert names(home_as(production, key, "admin@example.com")) == [a["name"] for a in config.APPS]
+    assert names(home_as(production, key, "admin@example.com")) == [a["name"] for a in config.visible_apps()]
     assert apps_say.calls == []
 
 
@@ -456,7 +456,7 @@ def test_the_nav_apps_are_those_the_person_may_open_with_a_link_each(production,
 
 def test_the_administrator_gets_every_app_without_asking_any(production, key):
     production.cookies.set("oidc_session", id_token(key, "admin@example.com"))
-    assert [a["key"] for a in production.get("/api/apps").json()["apps"]] == [a["key"] for a in config.APPS]  # no stub: asking would fail
+    assert [a["key"] for a in production.get("/api/apps").json()["apps"]] == [a["key"] for a in config.visible_apps()]  # no stub: asking would fail
 
 
 def test_nav_apps_needs_a_sign_in_and_is_a_401_the_apps_pages_can_read(production):
@@ -521,3 +521,12 @@ def test_an_answer_is_remembered_for_a_day_and_asked_again_after_that(production
     clock[0] += 2 * 3600
     production.get("/api/apps")
     assert len(apps_say.calls) == asked * 2  # a day has passed: asked afresh
+
+
+def test_an_app_marked_hidden_is_on_no_page_and_in_no_menu_but_is_still_known(production, key, client):  # noqa: F811
+    assert [a["key"] for a in config.APPS if a.get("hidden")] == ["flights"]
+    production.cookies.set("oidc_session", id_token(key, "admin@example.com"))
+    html = production.get("/").text
+    assert "Flights" not in names(html) and "flights.evancooperman.com" not in html
+    assert "flights" not in [a["key"] for a in production.get("/api/apps").json()["apps"]]
+    assert "https://flights.evancooperman.com" in config.nav_origins()  # the app still works and may still ask for the menu's apps
