@@ -4,6 +4,7 @@ Global.mountUserBadge();
 const overallEl = document.getElementById("overall");
 const appsEl = document.getElementById("apps");
 const trendEl = document.getElementById("trend");
+const keysEl = document.getElementById("keys");
 const adminsBox = document.getElementById("include-admins");
 
 function overallCards(data) {
@@ -16,6 +17,10 @@ function overallCards(data) {
     Usage.card(p.in_several_apps, "use more than one app"),
     Usage.card(data.waiting_requests, "waiting for you to approve"),
   ]);
+}
+
+function keyCards(data) {
+  return Global.el("div", { class: "stat-grid" }, data.keys.map((k) => Usage.card(k.people, k.people === 1 ? `person has a ${k.label} key` : `people have a ${k.label} key`)));
 }
 
 function appCard(app) {
@@ -45,12 +50,14 @@ async function load() {
     overallEl.replaceChildren(Global.el("p", { class: "field-hint is-error", text: err.message }));
     appsEl.replaceChildren();
     trendEl.replaceChildren();
+    keysEl.replaceChildren();
     return;
   }
   const notes = data.not_reporting.length
     ? [Global.el("p", { class: "field-hint is-error", text: `Left out of the numbers: ${data.not_reporting.map((n) => n.why).join("; ")}.` })]
     : [];
   overallEl.replaceChildren(overallCards(data), ...notes);
+  keysEl.replaceChildren(keyCards(data));
   appsEl.replaceChildren(...data.apps.map(appCard));
   trendEl.replaceChildren(...Trend.section(data.trend));
 }

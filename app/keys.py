@@ -68,6 +68,19 @@ def status(email: str) -> dict:
     return {r["provider"]: {"last4": r["last4"], "added_at": _iso(r["updated_at"])} for r in rows}
 
 
+def counts(exclude_emails=()) -> list:
+    """For the Usage page: for each service, how many people have saved a key. Only numbers, never an address or a key. `exclude_emails`
+    (the administrators, by default) are left out, like everywhere else on that page."""
+    skip = {e.strip().lower() for e in exclude_emails}
+    with closing(_connect()) as connection:
+        rows = connection.execute("SELECT email, provider FROM api_keys").fetchall()
+    per: dict = {}
+    for r in rows:
+        if r["email"] not in skip:
+            per[r["provider"]] = per.get(r["provider"], 0) + 1
+    return [{"provider": p.id, "label": p.label, "people": per.get(p.id, 0)} for p in key_providers.PROVIDERS.values()]
+
+
 def providers_view(email: str) -> list:
     """What the Profile page shows: each service, and whether this person has a key for it (and whether it can still be read)."""
     mine = status(email)

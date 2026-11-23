@@ -113,6 +113,18 @@ def test_the_overview_counts_active_people_by_app_and_leaves_administrators_and_
     assert got["people"] == {"with_an_account": 3, "in_several_apps": 1, "active_7d": 1, "active_30d": 2, "never_used": 1}
 
 
+def test_the_overview_counts_how_many_people_saved_a_key_for_each_service_leaving_administrators_out_unless_asked(apps):
+    from app import keys
+
+    fill(apps)
+    for who, service in [("bob@example.com", "anthropic"), ("carol@example.com", "anthropic"), ("bob@example.com", "jina"), ("owner@example.com", "anthropic")]:
+        keys.save(who, service, "sk-0123456789abcdefghij")
+    mine = {k["provider"]: k["people"] for k in stats.overview(("c", "v"), now=NOW)["keys"]}
+    assert mine == {"anthropic": 2, "google_maps": 0, "jina": 1}  # the administrator's key is not counted
+    assert {k["provider"]: k["people"] for k in stats.overview(("c", "v"), include_admins=True, now=NOW)["keys"]}["anthropic"] == 3
+    assert "sk-0123" not in repr(stats.overview(("c", "v"), now=NOW))
+
+
 def test_administrators_are_counted_when_asked(apps):
     fill(apps)
     got = stats.overview(("c", "v"), include_admins=True, now=NOW)

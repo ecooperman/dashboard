@@ -90,6 +90,8 @@ hostname must **bypass Cloudflare Access** (a Bypass policy for just `dashboard.
 or people hit Cloudflare's login before they can reach the sign-in; and it needs the same cache-bypass rule
 as the other hostnames.
 
+The Usage page also shows **Saved API keys**: for each service, how many people have saved a key on their Profile (`keys.counts`; administrators left out unless the box is ticked). Counts only, never an address or a key.
+
 ## The daily usage chart
 
 The Usage page draws how many people used the apps on each of the last 30 days. Each app tells the dashboard the first time it sees a
