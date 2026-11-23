@@ -107,3 +107,11 @@ in `people.db` (`app/feedback.py`) with the app it came from and the page they w
 Admin group, with a count of those waiting). Each person sees what they sent, and whether it was dealt with, on their **Profile** page.
 Ten a day per person, 4000 characters, no attachments. The Jobs app's old messages are copied in once with the button on the Feedback page.
 
+## Your API keys (one per person, for every app)
+
+A person saves a key for a paid service (Anthropic, Google Maps, Jina) once on their **Profile** page; it is checked with the service, kept
+encrypted in `people.db` (`app/keys.py`, `KEY_ENCRYPTION_SECRET` from `shared.env`), never sent back to a browser, and never in an app's database.
+Trips and Jobs ask for it at the moment they use it (`shared_python.user_keys` -> `GET /internal/keys/<provider>`), forwarding the person's OWN
+sign-in cookie, so an app can only get the key of someone signed in and using it right now. The route refuses anything that came through the internet.
+A request with no sign-in (the Chrome extension's token door) gets no key. Only people let into an app (or an administrator) may save one.
+

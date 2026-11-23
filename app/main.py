@@ -12,9 +12,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from shared_python import account_lookup, auth, csrf, oidc_login
+from shared_python import account_lookup, auth, csrf, key_providers, keystore, oidc_login
 
-from . import access, config, feedback, people, stats, trend
+from . import access, config, feedback, keys, people, stats, trend
 
 # The front door for every app: /auth/login, /auth/callback and /auth/logout (shared_python.oidc_login)
 # sign people in through the identity provider and set the session cookie for the whole parent
@@ -128,6 +128,78 @@ def forget_menu_apps(body: MenuRefresh, request: Request):
     before = access.remembered_count()
     access.forget_apps(body.email.strip().lower() if body.email else None)
     return {"cleared": before - access.remembered_count()}
+
+
+# --- Your API keys: saved once here, used by the apps (app/keys.py) --------------------------------------------------------------
+
+
+class KeyIn(BaseModel):
+    key: str = Field(max_length=2000)
+
+
+def _key_provider(provider: str) -> str:
+    if provider not in key_providers.PROVIDERS:
+        raise HTTPException(status_code=404, detail="That isn't a service we keep keys for")
+    return provider
+
+
+async def _may_keep_keys(request: Request, email: str) -> None:
+    """Keys are for people who use an app (or run them): a stranger who merely signed in has nothing to use one for."""
+    if email not in config.ADMIN_EMAILS and not await asyncio.to_thread(access.nav_apps, request, email):
+        raise HTTPException(status_code=403, detail="Only people who have been let into an app can save a key")
+
+
+@app.get("/api/keys")
+async def my_keys(request: Request):
+    email = signed_in_email(request)
+    await _may_keep_keys(request, email)
+    return {"can_save": keystore.storage_available(), "keys": keys.providers_view(email)}
+
+
+@app.put("/api/keys/{provider}")
+async def save_key(provider: str, body: KeyIn, request: Request):
+    """Check the key with its service, then keep it (encrypted). A service that cannot be reached for the check still gets the key saved, with a
+    note that it was not checked."""
+    email = signed_in_email(request)
+    await _may_keep_keys(request, email)
+    provider = _key_provider(provider)
+    if not keystore.storage_available():
+        raise HTTPException(status_code=503, detail="Saving keys isn't set up on the server yet. Ask the administrator.")
+    try:
+        key = keystore.clean(body.key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    verified, why = await asyncio.to_thread(key_providers.verify, provider, key)
+    if verified is False:
+        raise HTTPException(status_code=400, detail=why)
+    keys.save(email, provider, key)
+    return {"verified": verified is True, "note": "" if verified else f"Saved, but not checked: {why}."}
+
+
+@app.delete("/api/keys/{provider}")
+def remove_key(provider: str, request: Request):
+    email = signed_in_email(request)
+    if not keys.remove(email, _key_provider(provider)):
+        raise HTTPException(status_code=404, detail="There was no saved key to remove")
+    return {"ok": True}
+
+
+@app.get("/internal/keys/{provider}")
+def key_for_an_app(provider: str, request: Request):
+    """The key itself, for an app that is using it for this signed-in person right now (shared_python.user_keys). The person is whoever the
+    forwarded sign-in cookie says, so an app cannot ask for anyone else's. Only for the apps on this machine; never cached."""
+    _no_internet(request)
+    key = keys.get_plain(signed_in_email(request), _key_provider(provider))
+    if key is None:
+        raise HTTPException(status_code=404, detail="No key saved")
+    return JSONResponse({"key": key}, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/internal/keys")
+def what_keys_they_have(request: Request):
+    """Which keys this signed-in person saved (the last four characters and when), for an app's own status line. Never a key."""
+    _no_internet(request)
+    return JSONResponse({"keys": keys.status(signed_in_email(request))}, headers={"Cache-Control": "no-store"})
 
 
 # --- Send feedback, for every app (app/feedback.py) ----------------------------------------------------------------------------
