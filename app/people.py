@@ -337,13 +337,12 @@ def tell_them(email: str, admin_email: str, app_names: List[str]) -> None:
     if not app_names:
         return
     which = ", ".join(app_names[:-1]) + (" and " if len(app_names) > 1 else "") + app_names[-1]
-    lines = [
-        f"{admin_email} gave you access to {which}.",
-        "",
-        f"Open it here: {config.DASHBOARD_URL}",
-        "",
-        f"Sign in with this email address (it's the one you were let in as): {email}",
-    ]
+    lines = [f"{admin_email} gave you access to {which}."]
+    if config.ENV == "production":
+        # Whether this address already has an account decides the link: sign in, or create an account with this address filled in.
+        lines += notify.sign_in_lines(email, config.DASHBOARD_URL, login_url=f"{config.DASHBOARD_URL}auth/login")
+    else:
+        lines += ["", f"Open it here: {config.DASHBOARD_URL}", "", f"Sign in with this email address (it's the one you were let in as): {email}"]
     try:
         notify.send_email(email, f"{admin_email} gave you access to {which}", "\n".join(lines))
     except Exception as exc:  # noqa: BLE001 - never fail the change because the email did

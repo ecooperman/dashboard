@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from shared_python import auth, csrf, oidc_login
+from shared_python import account_lookup, auth, csrf, oidc_login
 
 from . import access, config, feedback, people, stats, trend
 
@@ -236,6 +236,19 @@ def access_changed(body: AccessChanged, request: Request):
     is refused as if the route did not exist. All it does is drop one remembered answer."""
     _no_internet(request)
     access.forget_apps(body.email)
+
+
+class AccountQuestion(BaseModel):
+    email: str
+
+
+@app.post("/internal/account-exists")
+def account_exists(body: AccountQuestion, request: Request):
+    """Does this address already have an account at the sign-in provider? For the apps that write invite emails (shared_python.account_lookup):
+    only the dashboard holds the provider's management credentials. `null` means cannot tell. Only for the apps on this machine; the answer
+    never leaves for a browser."""
+    _no_internet(request)
+    return {"exists": account_lookup.direct(body.email)}
 
 
 class ActiveDay(BaseModel):

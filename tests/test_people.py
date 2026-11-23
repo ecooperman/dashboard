@@ -8,7 +8,7 @@ from shared_python import notify
 
 from app import config, people
 from app.main import app
-from tests.test_home import apps_say, id_token, key, production  # noqa: F401 - fixtures
+from tests.test_home import apps_say, client, id_token, key, production  # noqa: F401 - fixtures
 
 ADMIN = "admin@example.com"
 PORTS = {":8030": "lists", ":8060": "trips", ":8010": "time", ":8020": "plans", ":8080": "finances", ":8041": "resume"}
@@ -342,3 +342,57 @@ def test_someone_who_already_has_an_app_is_never_added_or_emailed_again_whatever
     got = admin.put("/api/people/access", json={"email": "ann@example.com", "app": app_key, "enabled": True}).json()
     assert got == {"result": "already"} and mail == []
     assert [c for c in apps.calls if c["method"] == "POST"] == []
+
+
+# --- the link in the email fits whether the address already has an account ------------------------------------------------------
+
+
+def _email_for(production, monkeypatch, answer):  # noqa: F811
+    from shared_python import account_lookup
+
+    monkeypatch.setattr(config, "ENV", "production")
+    monkeypatch.setattr(config, "DASHBOARD_URL", "https://dashboard.evancooperman.com/")
+    monkeypatch.setattr(account_lookup, "exists", lambda email: answer)
+    sent = []
+    monkeypatch.setattr(notify, "send_email", lambda to, subject, body, **kw: sent.append(body) or True)
+    people.tell_them("dana@example.com", ADMIN, ["Lists"])
+    return sent[0]
+
+
+def test_someone_who_already_has_an_account_is_only_told_to_sign_in(monkeypatch):
+    body = _email_for(None, monkeypatch, True)
+    assert "already have an account" in body and "screen_hint=signup" not in body and "https://dashboard.evancooperman.com/" in body
+
+
+def test_someone_with_no_account_is_given_the_create_account_link_for_that_address(monkeypatch):
+    body = _email_for(None, monkeypatch, False)
+    assert "https://dashboard.evancooperman.com/auth/login?screen_hint=signup&login_hint=dana%40example.com" in body
+    assert "If it says you already have an account" in body
+
+
+def test_when_it_cannot_tell_both_links_are_there(monkeypatch):
+    body = _email_for(None, monkeypatch, None)
+    assert "screen_hint=signup" in body and "Already have an account?" in body
+
+
+def test_locally_the_email_is_as_it_always_was(monkeypatch):
+    from shared_python import account_lookup
+
+    monkeypatch.setattr(account_lookup, "exists", lambda email: pytest.fail("looked up an address in a local run"))
+    sent = []
+    monkeypatch.setattr(notify, "send_email", lambda to, subject, body, **kw: sent.append(body) or True)
+    people.tell_them("dana@example.com", ADMIN, ["Lists"])
+    assert "Open it here: http://localhost" in sent[0] and "Sign in with this email address" in sent[0]
+
+
+# --- the internal question the other apps ask ------------------------------------------------------------------------------------
+
+
+def test_the_dashboard_answers_whether_an_account_exists_to_apps_on_this_machine_only(client, monkeypatch):  # noqa: F811
+    from shared_python import account_lookup
+
+    monkeypatch.setattr(account_lookup, "direct", lambda email: {"dana@example.com": True, "new@example.com": False}.get(email))
+    assert client.post("/internal/account-exists", json={"email": "dana@example.com"}).json() == {"exists": True}
+    assert client.post("/internal/account-exists", json={"email": "new@example.com"}).json() == {"exists": False}
+    assert client.post("/internal/account-exists", json={"email": "odd@example.com"}).json() == {"exists": None}  # cannot tell
+    assert client.post("/internal/account-exists", json={"email": "dana@example.com"}, headers={"Cf-Connecting-Ip": "203.0.113.5"}).status_code == 404
