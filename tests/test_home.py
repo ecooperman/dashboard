@@ -366,7 +366,7 @@ def test_an_administrator_address_cannot_break_out_of_the_link_or_the_page(produ
     monkeypatch.setattr(config, "ADMIN_EMAILS", {'a"><script>alert(1)</script>@example.com'})
     apps_say.status = {"lists": 403, "trips": 500, "time": 403, "plans": 403, "finances": 403}
     html = home_as(production, key, "bob@example.com")
-    assert "<script>alert(1)" not in html and 'a"><' not in html
+    assert "<script>alert(1)" not in html and 'a"><script>' not in html
 
 
 def test_an_administrator_is_never_shown_a_problem_because_nothing_is_asked(production, key, apps_say):

@@ -4,12 +4,9 @@
 // hiding the links is only tidiness.
 const path = window.location.pathname;
 (async () => {
-  let me = { is_admin: false };
-  try {
-    me = await Global.fetchJSON("/api/me");
-  } catch (err) {
-    /* the page's own requests will say what is wrong */
-  }
+  // The same /api/me answer the page header's badge uses (Global.currentUser asks once per page and shares it, so this is no second request).
+  // Signed out, or any failure: no administrator links; the page's own requests will say what is wrong.
+  const me = (await Global.currentUser()) || { is_admin: false };
   window.DASHBOARD_ME = me;
   const items = [
     { href: "/", icon: "home", label: "Apps", active: path === "/" },

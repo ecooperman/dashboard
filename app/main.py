@@ -642,14 +642,8 @@ def signed_out(request: Request):
     return templates.TemplateResponse(request, "goodbye.html", {"shared_assets_base": config.SHARED_ASSETS_BASE})
 
 
-@app.middleware("http")
-async def no_cache(request: Request, call_next):
-    """Never let the browser (or an installed-app cache) serve a stale copy, and above all never a
-    stale sign-in redirect. `no-store`, not `no-cache`: it is the only unambiguous 'cache this
-    nowhere' signal. (Cloudflare's edge needs its own bypass rule for this hostname too.)"""
-    response = await call_next(request)
-    response.headers["Cache-Control"] = "no-store"
-    return response
+# Cache-Control for every response: no-store, except a versioned script/stylesheet/image (?v=<hash>), kept for a year - see shared_python/pages.py.
+pages.install_cache_headers(app)
 
 
 app.include_router(oidc_login.router)  # /auth/login, /auth/callback, /auth/logout (404 until configured)
