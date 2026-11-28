@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from shared_python import account_lookup, auth, csrf, key_providers, keystore, oidc_login
+from shared_python import account_lookup, auth, csrf, key_providers, keystore, oidc_login, pages
 
 from . import access, config, feedback, keys, people, stats, trend
 
@@ -40,6 +40,7 @@ app = FastAPI(title="dashboard")
 csrf.install(app)  # a change must come from this app's own pages, not another app or site (shared_python.csrf)
 auth.warm_up_on_start(app)  # fetch the sign-in keys in the background at start-up, so nobody's first page waits for them
 templates = Jinja2Templates(directory="templates")
+pages.install(templates)
 
 
 DIGEST_CHECK_SECONDS = 30  # how often to look whether a digest is due (people.send_digest decides; usually it does nothing)
